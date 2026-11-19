@@ -1,0 +1,30 @@
+name: Scripter-Release
+on:
+  push:
+    branches: [codex/scripter-release-1.0.0]
+
+concurrency:
+  group: scripter-release-1-0-0
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    steps:
+      - name: Quellcode auschecken
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Node.js einrichten
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Pakete bauen und prüfen
+        run: bash tools/release-build.sh "$RUNNER_TEMP/scripter-release"
+      - name: Pakete hochladen und Release veröffentlichen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash tools/release-publish.sh "$RUNNER_TEMP/scripter-release"
