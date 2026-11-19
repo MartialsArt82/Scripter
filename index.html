@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: romanasset:; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; connect-src 'none'; media-src blob:">
+<title>Scripter</title>
+<link rel="stylesheet" href="fonts/fonts.css"><link rel="stylesheet" href="style.css">
+<script defer src="node_modules/dompurify/dist/purify.min.js"></script><script defer src="app.js"></script>
+</head>
+<body>
+<aside class="sidebar" aria-label="Projektnavigation">
+  <div class="brand"><span class="brand-mark" data-icon="feather"></span><span id="app-brand">Scripter</span></div>
+  <div class="project-selector"><button id="project-menu" class="project-button" aria-haspopup="true" aria-expanded="false"><span class="project-symbol" data-icon="book-open"></span><span class="project-text"><small>MEIN PROJEKT</small><strong id="project-name">Roman</strong></span><span data-icon="chevrons-up-down"></span></button>
+    <div id="project-options" class="popover" hidden>
+      <button data-project="new"><span data-icon="file-plus"></span> Neues Projekt</button><button data-project="open"><span data-icon="folder-open"></span> Projekt öffnen</button><button data-project="meta"><span data-icon="pencil"></span> Titel und Autor</button><button data-project="backup"><span data-icon="archive"></span> Projekt sichern</button>
+    </div>
+  </div>
+  <nav class="main-nav">
+    <button data-view="editor" class="nav-item active"><span data-icon="pen-line"></span> Schreiben</button>
+    <button data-view="material" class="nav-item"><span data-icon="folder-open"></span> Material</button>
+    <button data-view="layout" class="nav-item"><span data-icon="book-open-check"></span> Buchsatz</button>
+  </nav>
+  <div class="chapter-section">
+    <div class="section-label"><span>KAPITEL</span><button id="new-chapter" class="icon-button" title="Kapitel hinzufügen" aria-label="Kapitel hinzufügen" data-icon="plus"></button></div>
+    <div id="chapter-list"></div>
+    <button id="add-chapter" class="add-button"><span data-icon="plus"></span> Kapitel hinzufügen</button>
+  </div>
+  <div class="sidebar-bottom">
+    <div class="total"><span>Manuskript</span><strong id="total-words">0 Wörter</strong></div>
+    <button id="settings" class="nav-item"><span data-icon="settings"></span> Einstellungen</button>
+    <button id="help" class="nav-item"><span data-icon="circle-help"></span> Hilfe</button>
+  </div>
+</aside>
+
+<div class="workspace">
+  <header class="topbar">
+    <div class="crumb"><span id="crumb-project">Mein Roman</span><span data-icon="chevron-right"></span><strong id="crumb-view">Schreiben</strong></div>
+    <div class="top-actions">
+      <span class="saved"><span data-icon="check"></span><span id="save-status" role="status">Lokal gespeichert</span></span>
+      <button id="theme" class="icon-button" aria-label="Farbschema wechseln" title="Farbschema wechseln"><span data-icon="moon"></span></button>
+      <button id="export" class="primary"><span data-icon="upload"></span> Exportieren</button>
+    </div>
+  </header>
+
+  <div id="editor-view" class="view editor-view">
+    <main class="editor-zone">
+      <div class="chapter-heading">
+        <div id="chapter-number" class="chapter-number">Kapitel 01</div>
+        <input id="chapter-title" class="chapter-title" aria-label="Kapiteltitel" maxlength="150" placeholder="Kapiteltitel">
+        <div id="chapter-metrics" class="chapter-metrics"></div>
+      </div>
+      <section class="sheet" aria-label="Manuskript">
+        <div class="toolbar" role="toolbar" aria-label="Textformatierung">
+          <label class="format-label"><span class="sr-only">Absatzformat</span><select id="block"><option value="p">Absatz</option><option value="h2">Überschrift</option><option value="h3">Zwischentitel</option><option value="blockquote">Zitat</option><option value="pre">Vorformatiert</option></select></label>
+          <span class="separator"></span>
+          <button data-command="bold" aria-label="Fett" title="Fett" data-icon="bold"></button>
+          <button data-command="italic" aria-label="Kursiv" title="Kursiv" data-icon="italic"></button>
+          <button data-command="underline" aria-label="Unterstreichen" title="Unterstreichen" data-icon="underline"></button>
+          <button data-command="strikeThrough" aria-label="Durchstreichen" title="Durchstreichen" data-icon="strikethrough"></button>
+          <span class="separator"></span>
+          <button data-command="insertUnorderedList" aria-label="Aufzählung" title="Aufzählung" data-icon="list"></button>
+          <button data-command="insertOrderedList" aria-label="Nummerierte Liste" title="Nummerierte Liste" data-icon="list-ordered"></button>
+          <button data-command="justifyCenter" aria-label="Zentrieren" title="Zentrieren" data-icon="align-center"></button>
+          <button data-command="justifyLeft" aria-label="Linksbündig" title="Linksbündig" data-icon="align-left"></button>
+          <span class="separator"></span>
+          <button data-command="undo" aria-label="Rückgängig" title="Rückgängig" data-icon="undo-2"></button>
+          <button data-command="redo" aria-label="Wiederholen" title="Wiederholen" data-icon="redo-2"></button>
+          <span class="toolbar-spacer"></span>
+          <button id="dictate" title="Diktat starten" aria-label="Diktat starten" class="dictate"><span data-icon="mic"></span><span>Diktat</span></button>
+          <button id="focus-mode" aria-label="Fokusmodus" title="Fokusmodus" data-icon="maximize-2"></button>
+        </div>
+        <div id="manuscript" role="textbox" aria-label="Manuskripttext" aria-multiline="true" contenteditable="true" spellcheck="true" data-placeholder="Beginne hier mit deinem Kapitel …"></div>
+      </section>
+    </main>
+    <aside class="inspector" aria-label="Kapitelwerkzeuge">
+      <section class="panel goal-panel">
+        <div class="panel-title"><span class="panel-icon" data-icon="target"></span><h2>Kapitelziel</h2></div>
+        <div class="goal-metric"><strong id="goal-current">0</strong><span id="goal-amount">/ 1.200 Wörter</span></div>
+        <progress id="goal-progress" value="0" max="100" aria-label="Fortschritt zum Kapitelziel"></progress>
+        <div class="goal-footer"><span id="goal-caption"></span><button id="edit-goal" class="text-button">Bearbeiten</button></div>
+        <label for="intent" class="field-label">Was soll im Kapitel passieren?</label>
+        <textarea id="intent" rows="3" placeholder="Szenenidee oder Kapitelziel …"></textarea>
+      </section>
+      <section class="panel dictionary-panel">
+        <div class="panel-title"><span class="panel-icon" data-icon="book-a"></span><h2>Wortschatz</h2></div>
+        <form id="lookup" class="lookup"><input id="lookup-word" placeholder="Wort nachschlagen" aria-label="Wort nachschlagen" required maxlength="60"><button aria-label="Suchen" title="Suchen" class="icon-button" data-icon="search"></button></form>
+        <div class="panel-subrow"><select id="dictionary-language" aria-label="Sprache für Wortschatz"></select><button id="use-selection" class="text-button">Markierung</button></div>
+        <div id="synonyms" aria-live="polite"></div>
+      </section>
+      <section class="panel spelling-panel">
+        <div class="panel-title"><span class="panel-icon" data-icon="spell-check"></span><h2>Rechtschreibung</h2></div>
+        <div class="panel-subrow"><select id="spell-language" aria-label="Sprache der Rechtschreibprüfung"></select><button id="check-spelling" class="text-button">Prüfen</button></div>
+        <div id="spell-result" aria-live="polite"></div>
+      </section>
+    </aside>
+  </div>
+
+  <main id="material-view" class="view page-view" hidden>
+    <div class="page-heading"><div><h1>Material</h1><p>Recherche, Dateien und Transkripte für dein Projekt.</p></div><button id="add-url" class="secondary"><span data-icon="link"></span> Weblink hinzufügen</button></div>
+    <button id="pick-files" class="drop-zone"><span class="panel-icon" data-icon="upload-cloud"></span><strong>Dateien hier ablegen</strong><span>Text, Fotos, PDFs, Audio und Video</span><span class="secondary">Dateien auswählen</span></button>
+    <div id="material-list"></div>
+  </main>
+
+  <main id="layout-view" class="view page-view" hidden>
+    <div class="page-heading"><div><h1>Buchsatz</h1><p>Gestalte die Druckseiten deines Manuskripts.</p></div><button id="preview" class="primary"><span data-icon="scan-eye"></span> Satzvorschau</button></div>
+    <div class="layout-body">
+      <form id="layout-settings" class="panel layout-settings">
+        <div class="panel-title"><span class="panel-icon" data-icon="sliders-horizontal"></span><h2>Seitenlayout</h2></div>
+        <label>Buchformat<select name="trim"><option value="trade">Taschenbuch · 135 × 215 mm</option><option value="pocket">Kompakt · 120 × 190 mm</option><option value="a5">DIN A5 · 148 × 210 mm</option><option value="a4">DIN A4 · 210 × 297 mm</option><option value="us">US Trade · 6 × 9 in</option></select></label>
+        <label>Seitenrand in mm<input name="margins" type="number" min="11" max="35"></label>
+        <label>Schriftgröße in pt<input name="size" type="number" min="8" max="20"></label>
+        <label>Zeilenabstand<input name="leading" type="number" min="1.1" max="2.2" step=".1"></label>
+        <label class="check-field"><input name="pageNumbers" type="checkbox"> Seitenzahlen im PDF</label>
+      </form>
+      <div class="layout-preview"><article id="book-cover"><h2></h2><p></p></article></div>
+    </div>
+  </main>
+  <footer class="statusbar"><span><span data-icon="hard-drive"></span> Lokales Projekt</span><span id="status-count"></span><button id="status-zoom" class="text-button" title="Bildschirmskalierung ändern">100 %</button></footer>
+</div>
+
+<div id="drop-overlay" hidden><div><span data-icon="upload-cloud"></span><strong>Material hier ablegen</strong></div></div>
+<dialog id="modal"><form id="modal-form"><div class="modal-top"><h2 id="modal-title"></h2><button type="button" id="close-modal" class="icon-button" aria-label="Schließen" data-icon="x"></button></div><div id="modal-content"></div><div class="modal-actions"><button type="button" id="cancel-modal" class="secondary">Schließen</button><button type="submit" id="confirm-modal" class="primary">Speichern</button></div></form></dialog>
+<div id="toast" role="status" hidden></div>
+</body>
+</html>

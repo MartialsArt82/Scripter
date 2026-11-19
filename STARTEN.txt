@@ -1,0 +1,35 @@
+SCRIPTER 1.0.0
+
+Windows x64
+  Die ZIP-Datei vollständig entpacken. Im Ordner „Scripter“
+  „Scripter.exe“ starten. Die Dateisignatur eines Herausgebers fehlt.
+
+Fedora und Nobara x64
+  Das Archiv vollständig entpacken. Im entpackten Ordner per Doppelklick
+  „Scripter“ starten oder im Terminal „./Scripter“ ausführen.
+  Die App verwendet den regulären Electron-Sandboxmechanismus. Fedora und
+  Nobara mit grafischer Standardinstallation stellen die nötigen System-
+  bibliotheken bereit. Auf Minimalinstallationen sind GTK 3, NSS und ALSA
+  erforderlich.
+
+macOS
+  Apple Silicon (M1 und neuer) verwendet macOS-Apple-Silicon.
+  Intel-Macs verwenden macOS-Intel. Die ZIP-Datei mit dem Finder
+  entpacken und „Scripter.app“ in „Programme“ verschieben.
+  Die App ist ohne Apple-Developer-ID bereitgestellt. Falls macOS den
+  ersten Start blockiert, öffne „Systemeinstellungen“ → „Datenschutz &
+  Sicherheit“ und wähle bei Scripter „Dennoch öffnen“, sofern du
+  der Datei vertraust. Unternehmensgeräte können eigene Regeln haben.
+  Die Mindestversion für den eingebetteten Pandoc-Build ist macOS 13.
+
+Erste Schritte
+  Über das Projektmenü oben links ein neues Projekt anlegen. Die App
+  speichert lokal. Für Sicherungen und Gerätewechsel den vollständigen
+  Projektordner inklusive „roman.json“ und „Material“ kopieren.
+  Das eingebaute Hilfemenü erklärt alle Funktionen.
+
+Optionale Programme
+  Python 3.12 und „Spracherkennung einrichten“ in den Einstellungen
+  aktivieren deutsches und englisches Diktat und Transkripte.
+  Für den älteren Word-Export in .doc wird LibreOffice benötigt.
+  Für die Textübernahme aus PDFs mit Textebene wird Poppler benötigt.

@@ -1,0 +1,1 @@
+https://raw.githubusercontent.com/LibreOffice/dictionaries/master/pt_PT/th_pt_PT.dat
