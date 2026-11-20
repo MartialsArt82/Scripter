@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('desk', {
   suggest: (word, lang) => call('suggest', word, lang),
   spell: (words, lang) => call('spell', words, lang), zoom: value => call('zoom', value),
   publish: (format, manuscript) => call('publish', format, manuscript),
-  transcribe: (source, lang) => call('transcribe', source, lang), setup: () => call('setup'),
+  transcribe: (source, lang) => call('transcribe', source, lang),
+  refreshTranscript: value => call('refresh-transcript', value), setup: () => call('setup'),
   help: () => call('help')
 });

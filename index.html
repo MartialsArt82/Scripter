@@ -5,7 +5,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: romanasset:; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; connect-src 'none'; media-src blob:">
 <title>Scripter</title>
 <link rel="stylesheet" href="fonts/fonts.css"><link rel="stylesheet" href="style.css">
-<script defer src="node_modules/dompurify/dist/purify.min.js"></script><script defer src="app.js"></script>
+<script defer src="node_modules/dompurify/dist/purify.min.js"></script><script defer src="app.js"></script><script defer src="speech-ui.js"></script><script defer src="storyboard.js"></script>
 </head>
 <body>
 <aside class="sidebar" aria-label="Projektnavigation">
@@ -17,6 +17,7 @@
   </div>
   <nav class="main-nav">
     <button data-view="editor" class="nav-item active"><span data-icon="pen-line"></span> Schreiben</button>
+    <button data-view="storyboard" class="nav-item"><span data-icon="calendar-range"></span> Storyboard</button>
     <button data-view="material" class="nav-item"><span data-icon="folder-open"></span> Material</button>
     <button data-view="layout" class="nav-item"><span data-icon="book-open-check"></span> Buchsatz</button>
   </nav>
@@ -87,6 +88,10 @@
         <div class="panel-subrow"><select id="dictionary-language" aria-label="Sprache für Wortschatz"></select><button id="use-selection" class="text-button">Markierung</button></div>
         <div id="synonyms" aria-live="polite"></div>
       </section>
+      <section class="panel speech-panel">
+        <div class="panel-title"><span class="panel-icon" data-icon="mic"></span><h2>Sprachwörterbuch</h2></div>
+        <div class="panel-subrow"><button id="speech-vocabulary" class="text-button">Einträge</button><button id="learn-speech" class="text-button">Markierung lernen</button></div>
+      </section>
       <section class="panel spelling-panel">
         <div class="panel-title"><span class="panel-icon" data-icon="spell-check"></span><h2>Rechtschreibung</h2></div>
         <div class="panel-subrow"><select id="spell-language" aria-label="Sprache der Rechtschreibprüfung"></select><button id="check-spelling" class="text-button">Prüfen</button></div>
@@ -94,6 +99,26 @@
       </section>
     </aside>
   </div>
+
+  <main id="storyboard-view" class="view page-view storyboard-view" hidden>
+    <div class="page-heading">
+      <div><h1>Storyboard</h1><p>Ordne Szenen als Zettel und verknüpfe sie mit deinen Kapiteln.</p></div>
+      <button id="add-story-note" class="primary"><span data-icon="plus"></span> Zettel hinzufügen</button>
+    </div>
+    <div class="storyboard-toolbar" aria-label="Storyboard-Ansicht">
+      <button type="button" data-board-mode="board" aria-pressed="true">Pinnwand</button>
+      <button type="button" data-board-mode="timeline" aria-pressed="false">Zeitleiste</button>
+    </div>
+    <div id="storyboard-scroll" tabindex="0" aria-label="Pinnwand">
+      <div id="storyboard-canvas">
+        <svg id="board-connections" aria-hidden="true"></svg>
+        <aside class="board-rail" aria-label="Kapitel auf der Pinnwand"><h2>Kapitel</h2><div id="board-chapters"></div></aside>
+        <div id="board-notes"></div>
+        <div id="board-empty"><span class="panel-icon" data-icon="calendar-range"></span><p>Hier ist Platz für deine erste Szene.</p></div>
+      </div>
+    </div>
+    <div id="storyboard-timeline" aria-label="Zeitleiste" hidden></div>
+  </main>
 
   <main id="material-view" class="view page-view" hidden>
     <div class="page-heading"><div><h1>Material</h1><p>Recherche, Dateien und Transkripte für dein Projekt.</p></div><button id="add-url" class="secondary"><span data-icon="link"></span> Weblink hinzufügen</button></div>

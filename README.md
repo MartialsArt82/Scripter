@@ -1,4 +1,4 @@
-# Scripter 1.0.0
+# Scripter 1.1.0
 
 Lokale Desktop-App für Romanprojekte unter Windows, macOS und Linux. Windows x64, macOS (Apple Silicon und Intel) sowie Fedora/Nobara x64 werden als portable Pakete angeboten.
 
@@ -26,9 +26,9 @@ Benötigt werden im Runtime-Ordner die Plattformarchive `<ziel>.zip` für Electr
 
 ## GitHub-Release
 
-Der Workflow auf `codex/scripter-release-1.0.0` baut die vier portablen Pakete und hängt sie mit Quellcode und Prüfsummen an den Release-Entwurf `v1.0.0`. Nach dem Abgleich der SHA-256-Prüfsummen veröffentlicht er das Release im privaten Repository.
+Der Workflow auf `codex/scripter-release-1.1.0` baut die vier portablen Pakete und das Fedora/Nobara-RPM und hängt sie mit Quellcode und Prüfsummen an den Release-Entwurf `v1.1.0`. Nach dem Abgleich der SHA-256-Prüfsummen veröffentlicht er das Release im privaten Repository.
 
-`bash tools/release-build.sh /absoluter/ausgabeordner` führt denselben Build unter Linux x64 aus. Das Skript lädt die geprüften Electron-, Pandoc- und Signierwerkzeuge bei Bedarf herunter.
+`bash tools/release-build.sh /absoluter/ausgabeordner` führt denselben Build unter Linux x64 mit `rpmbuild`, `rpm` und `desktop-file-validate` aus. Das Skript lädt die geprüften Electron-, Pandoc- und Signierwerkzeuge bei Bedarf herunter.
 
 ## Projektdaten
 

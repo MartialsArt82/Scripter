@@ -1,10 +1,17 @@
-SCRIPTER 1.0.0
+SCRIPTER 1.1.0
 
 Windows x64
   Die ZIP-Datei vollständig entpacken. Im Ordner „Scripter“
   „Scripter.exe“ starten. Die Dateisignatur eines Herausgebers fehlt.
 
 Fedora und Nobara x64
+  Das RPM herunterladen und per Terminal installieren:
+    sudo dnf install ./scripter-1.1.0-1.x86_64.rpm
+  „Scripter“ über die Anwendungsübersicht öffnen. Unter GNOME mit
+  Rechtsklick auf das Symbol und „Zu Favoriten hinzufügen“ anheften.
+  Unter KDE im Anwendungsmenü oder in der Taskleiste anheften.
+
+Portable Ausgabe für Fedora und Nobara x64
   Das Archiv vollständig entpacken. Im entpackten Ordner per Doppelklick
   „Scripter“ starten oder im Terminal „./Scripter“ ausführen.
   Die App verwendet den regulären Electron-Sandboxmechanismus. Fedora und

@@ -8,7 +8,7 @@ async function pack() {
   const build = path.resolve(process.argv[2]);
   const root = path.resolve(__dirname, '..');
   const staging = path.join(build, 'app-files');
-  const files = ['app.js','core.cjs','main.cjs','preload.cjs','preview-preload.cjs','pdf-preview','index.html','style.css','hilfe.html','transcribe.py','package.json','data','fonts','icons'];
+  const files = ['app.js','core.cjs','main.cjs','speech.cjs','speech-ui.js','storyboard.js','preload.cjs','preview-preload.cjs','pdf-preview','index.html','style.css','hilfe.html','transcribe.py','package.json','data','fonts','icons'];
   await fs.rm(staging, { recursive: true, force: true });
   await fs.mkdir(staging, { recursive: true });
   for (const name of files) await fs.cp(path.join(root, name), path.join(staging, name), { recursive: true });

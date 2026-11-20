@@ -6,6 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { randomUUID } = require('node:crypto');
+const { applySpeechRules, voiceHints } = require('./speech.cjs');
 const { productName, version } = require('./package.json');
 const { atomic, bookHtml, escape, locales, project, validProject } = require('./core.cjs');
 
@@ -14,6 +15,7 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'romansatz', privileges: { secure: true, standard: true, supportFetchAPI: true, corsEnabled: true } }
 ]);
 app.setName(productName);
+if (process.platform === 'linux') app.setDesktopName('de.scripter.Scripter.desktop');
 if (process.env.ROMAN_TEST_DIR) {
   app.setPath('userData', process.env.ROMAN_TEST_DIR);
 } else {
@@ -180,10 +182,13 @@ async function transcript(source, lang) {
     }
     const script = path.join(temp, 'transcribe.py');
     await fsp.copyFile(path.join(__dirname, 'transcribe.py'), script);
-    const output = await run(voicePython(), [script, input, lang, path.join(voiceDir(), 'modell')], {
+    const rules = state.speechRules;
+    const hintFile = path.join(temp, 'vokabular.txt');
+    await fsp.writeFile(hintFile, voiceHints(rules, lang), 'utf8');
+    const output = await run(voicePython(), [script, input, lang, path.join(voiceDir(), 'modell'), hintFile], {
       env: { ...process.env, HF_HUB_OFFLINE: '1', HF_HOME: path.join(voiceDir(), 'cache') }
     });
-    return JSON.parse(output);
+    return applySpeechRules(JSON.parse(output), rules);
   } finally {
     whisperBusy = false;
     if (temp) await fsp.rm(temp, { recursive: true, force: true });
@@ -453,6 +458,7 @@ app.whenReady().then(() => {
   });
   handle('zoom', value => main.webContents.setZoomFactor(Math.max(.75, Math.min(1.5, Number(value) / 100 || 1))));
   handle('setup', setupWhisper);
+  handle('refresh-transcript', value => applySpeechRules(value, state.speechRules));
   handle('transcribe', transcript);
   handle('publish', publish);
   handle('help', async () => {

@@ -1,3 +1,4 @@
+const { normalizeSpeechRules } = require('./speech.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -13,7 +14,7 @@ function project(title, demo = false) {
     first.intent = 'Clara findet den Brief. Der erste Hinweis führt zum Bahnhof.';
     first.html = '<p>Als Clara an jenem Morgen die Tür öffnete, lag ein Brief auf der Schwelle. Der Umschlag war feucht und an einer Ecke eingerissen. Sie erkannte die Schrift ihrer Schwester, obwohl sie seit zwölf Jahren keinen Brief mehr von ihr bekommen hatte.</p><p>Hinter den Häusern setzte sich der erste Zug in Bewegung. Clara blieb barfuß im Türrahmen stehen, bis das Geräusch der Räder verklungen war. Erst dann drehte sie den Umschlag um.</p><p>Auf der Rückseite stand nur eine Uhrzeit.</p>';
   }
-  return { version: 1, title, author: '', active: first.id, chapters: demo ? [first, chapter('Am Bahnsteig'), chapter('Die Rückkehr')] : [first], assets: [], settings: { ...defaults } };
+  return { version: 1, title, author: '', active: first.id, chapters: demo ? [first, chapter('Am Bahnsteig'), chapter('Die Rückkehr')] : [first], assets: [], storyboard: [], speechRules: [], settings: { ...defaults } };
 }
 function atomic(filename, value) {
   const temp = filename + '.partial';
@@ -22,6 +23,20 @@ function atomic(filename, value) {
 }
 function validProject(value) {
   if (value?.version !== 1 || !Array.isArray(value.chapters) || !value.chapters.length || !Array.isArray(value.assets)) throw new Error('Diese Datei ist kein Scripter-Projekt.');
+  const chapters = new Set(value.chapters.map(chapter => chapter.id));
+  const position = number => Math.round(Math.max(0, Math.min(100000, Number(number) || 0)));
+  value.storyboard = (Array.isArray(value.storyboard) ? value.storyboard : []).filter(note => typeof note?.id === 'string').map(note => ({
+    id: note.id,
+    title: String(note.title ?? '').slice(0, 100),
+    body: String(note.body ?? '').slice(0, 2000),
+    when: String(note.when ?? '').slice(0, 80),
+    order: Math.min(99999, Math.max(1, Math.round(Number(note.order) || 1))),
+    color: ['sand', 'sage', 'rose', 'blue'].includes(note.color) ? note.color : 'sand',
+    x: position(note.x),
+    y: position(note.y),
+    chapters: [...new Set(Array.isArray(note.chapters) ? note.chapters.filter(id => chapters.has(id)) : [])]
+  }));
+  value.speechRules = normalizeSpeechRules(value.speechRules);
   return value;
 }
 const trims = { trade: [135, 215], pocket: [120, 190], a5: [148, 210], a4: [210, 297], us: [152.4, 228.6] };

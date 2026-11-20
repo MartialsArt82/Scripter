@@ -203,12 +203,14 @@ function showView(name) {
     if (button.dataset.view === name) button.setAttribute('aria-current', 'page');
     else button.removeAttribute('aria-current');
   }
-  for (const key of ['editor','material','layout']) $('#' + key + '-view').hidden = key !== name;
-  $('#crumb-view').textContent = { editor: 'Schreiben', material: 'Material', layout: 'Buchsatz' }[name];
+  for (const key of ['editor','storyboard','material','layout']) $('#' + key + '-view').hidden = key !== name;
+  $('#crumb-view').textContent = { editor: 'Schreiben', storyboard: 'Storyboard', material: 'Material', layout: 'Buchsatz' }[name];
+  if (name === 'storyboard') renderStoryboard();
   refreshMetrics();
 }
 function openModal(title, content, action, verb = 'Speichern') {
   $('#modal-title').textContent = title;
+  $('#modal-content').onclick = null;
   $('#modal-content').innerHTML = content;
   $('#confirm-modal').textContent = verb;
   $('#confirm-modal').hidden = !action;
@@ -264,6 +266,7 @@ function chapterOptions(id) {
   $('#delete-chapter').onclick = () => {
     openModal('Kapitel löschen?', `<p>„${esc(item.title)}“ und sein Manuskripttext werden aus dem Projekt entfernt.</p>`, () => {
       state.chapters.splice(index, 1);
+      for (const note of state.storyboard) note.chapters = note.chapters.filter(chapterId => chapterId !== id);
       counts.delete(id);
       if (state.active === id) { state.active = state.chapters[Math.min(index, state.chapters.length - 1)].id; renderChapter(); }
       else {
@@ -342,14 +345,36 @@ function formatTime(seconds) {
   const time = Math.floor(seconds);
   return String(Math.floor(time / 60)).padStart(2,'0') + ':' + String(time % 60).padStart(2,'0');
 }
-function showTranscript(result, name, target) {
-  const value = result.segments.map(segment => segment.text).join('\n');
+function showTranscript(result, name, target, assetId) {
   const timed = result.segments.map(segment => '[' + formatTime(segment.start) + '] ' + segment.text).join('\n');
+  const corrected = result.segments.some(segment => segment.originalText != null);
+  const original = corrected ? result.segments.map(segment => segment.originalText ?? segment.text).join('\n') : '';
+  const value = result.segments.map(segment => segment.text).join('\n');
   if (!value) { toast('Es wurde keine Sprache erkannt.'); return; }
-  openModal(name, `<p>${esc(langs[result.language] || result.language)} · ${number(result.segments.length)} Abschnitte</p><textarea rows="10" aria-label="Transkript" readonly>${esc(timed)}</textarea>`, () => {
+  openModal(name, `<p>${esc(langs[result.language] || result.language)} · ${number(result.segments.length)} Abschnitte</p>
+    <textarea id="transcript-text" rows="10" aria-label="Transkript" readonly>${esc(timed)}</textarea>
+    ${corrected ? `<details class="speech-original"><summary>Ursprüngliche Erkennung anzeigen</summary><textarea id="transcript-original" rows="5" aria-label="Ursprüngliche Erkennung" readonly>${esc(original)}</textarea></details>` : ''}
+    <button type="button" id="learn-transcript" class="secondary">Markierung lernen</button>`, () => {
     modal.close();
     insertContent(paragraphs(value), target);
   }, 'Ins Kapitel');
+  $('#learn-transcript').onclick = () => {
+    const selected = [...$('#modal-content').querySelectorAll('textarea')].find(textarea =>
+      textarea.selectionEnd > textarea.selectionStart);
+    const marked = selected?.value.slice(selected.selectionStart, selected.selectionEnd).trim();
+    if (!marked) return toast('Markiere zuerst das Wort oder die Wendung im Transkript.');
+    if (marked.length > 160 || /\[\d+:\d+\]/.test(marked)) return toast('Markiere höchstens 160 Zeichen ohne Zeitstempel.');
+    editSpeechRule({
+      marked,
+      language: ['de','en'].includes(result.language) ? result.language : 'any',
+      onSaved: async () => {
+        if (!flush()) throw new Error('Das Sprachwörterbuch konnte nicht gespeichert werden.');
+        const updated = await window.desk.refreshTranscript(result);
+        state.assets = await window.desk.saveTranscript(assetId, updated);
+        showTranscript(updated, name, target, assetId);
+      }
+    });
+  };
 }
 function renderLayout() {
   const settings = state.settings;
@@ -401,6 +426,7 @@ async function dictate() {
       toast('Das Diktat wird transkribiert …');
       try {
         const bytes = await new Blob(chunks, { type: recorder.mimeType }).arrayBuffer();
+        if (!flush()) return;
         const result = await window.desk.transcribe({ bytes }, state.settings.speech);
         const content = result.segments.map(segment => segment.text).join(' ');
         if (content) { insertContent(paragraphs(content), target); toast('Diktat eingefügt.'); }
@@ -445,13 +471,17 @@ $('#chapter-list').addEventListener('click', event => {
   const button = event.target.closest('button[data-id]');
   if (!button) return;
   if (button.classList.contains('chapter-options')) return chapterOptions(button.dataset.id);
-  if (state.active !== button.dataset.id) {
-    state.active = button.dataset.id;
+  openChapter(button.dataset.id);
+});
+function openChapter(id) {
+  if (!state.chapters.some(item => item.id === id)) return;
+  if (state.active !== id) {
+    state.active = id;
     renderChapter();
     queueSave();
   }
   showView('editor');
-});
+}
 $('#project-menu').onclick = () => {
   const menu = $('#project-options');
   menu.hidden = !menu.hidden;
@@ -638,16 +668,17 @@ $('#material-list').onclick = async event => {
         renderMaterials();
       }, 'Entfernen');
     }
-    if (action === 'transcript') showTranscript(item.transcript, item.name, target);
+    if (action === 'transcript') showTranscript(item.transcript, item.name, target, id);
     if (action === 'transcribe') {
       if (transcribing || recording) return toast('Eine Sprachaufgabe läuft bereits.');
       transcribing = true;
       toast('Die Datei wird transkribiert …');
       try {
+        if (!flush()) return;
         const result = await window.desk.transcribe(id, state.settings.speech);
         state.assets = await window.desk.saveTranscript(id, result);
         renderMaterials();
-        showTranscript(result, item.name, target);
+        showTranscript(result, item.name, target, id);
       } finally { transcribing = false; }
     }
   } catch (error) { errorToast(error); }
