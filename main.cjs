@@ -56,33 +56,96 @@ const formats = {
   txt: ['Nur Text', 'txt'], markdown: ['Markdown', 'md'], html: ['HTML', 'html'],
   latex: ['LaTeX', 'tex'], icml: ['InDesign InCopy', 'icml']
 };
-let main, folder, manifest, registry, state, thesaurus, whisperBusy = false;
+const cloudProviders = new Set(['google','onedrive','dropbox','icloud','other']);
+let main, folder, manifest, manifestContents, registry, locationFile, state, thesaurus, whisperBusy = false;
+let unavailableProject = '';
+let locations = { preferred: '', provider: 'google', clouds: {} };
 
 function remember() {
   atomic(registry, JSON.stringify({ folder }));
 }
-function load(dir) {
+function load(dir, rememberProject = true) {
   const filename = path.join(dir, 'roman.json');
-  const next = validProject(JSON.parse(fs.readFileSync(filename, 'utf8')));
+  const raw = fs.readFileSync(filename, 'utf8');
+  const next = validProject(JSON.parse(raw));
   folder = dir;
   manifest = filename;
+  manifestContents = raw;
   state = next;
-  remember();
+  if (rememberProject) remember();
   return state;
 }
-function initialize(dir, title, demo) {
+function initialize(dir, title, demo, rememberProject = true) {
   fs.mkdirSync(path.join(dir, 'Material'), { recursive: true });
   const filename = path.join(dir, 'roman.json');
   fs.writeFileSync(filename, JSON.stringify(project(title, demo), null, 2), { flag: 'wx' });
-  return load(dir);
+  return load(dir, rememberProject);
 }
 function persist() {
-  atomic(manifest, JSON.stringify(state, null, 2));
+  let current;
+  try { current = fs.readFileSync(manifest, 'utf8'); }
+  catch (error) {
+    if (error.code === 'ENOENT') throw new Error('Die Projektdatei ist nicht mehr erreichbar. Prüfe den Ordner oder sichere deinen Arbeitsstand als Kopie.');
+    throw error;
+  }
+  if (current !== manifestContents) throw new Error('Die Projektdatei wurde außerhalb dieses Fensters geändert. Sichere deinen Arbeitsstand als Kopie, bevor du die andere Fassung öffnest.');
+  const next = JSON.stringify(state, null, 2);
+  if (next === current) return;
+  atomic(manifest, next);
+  manifestContents = next;
 }
 function save(draft) {
   const validated = validProject(draft);
+  const previous = state;
   state = { ...validated, assets: state.assets };
-  persist();
+  try { persist(); } catch (error) { state = previous; throw error; }
+}
+function normalizeLocations(value) {
+  const knownPath = input => typeof input === 'string' && path.isAbsolute(input) && !input.includes('\0') ? path.normalize(input) : '';
+  return {
+    preferred: knownPath(value?.preferred),
+    provider: cloudProviders.has(value?.provider) ? value.provider : 'google',
+    clouds: Object.fromEntries([...cloudProviders].map(key => [key, knownPath(value?.clouds?.[key])]))
+  };
+}
+function folderContains(root, candidate) {
+  const relative = path.relative(root, candidate);
+  return relative === '' || (!path.isAbsolute(relative) && relative !== '..' && !relative.startsWith('..' + path.sep));
+}
+function cloudRoot() {
+  const chosen = locations.clouds[locations.provider];
+  if (!chosen) throw new Error('Richte zuerst in den Einstellungen einen Cloud-Ordner ein.');
+  try {
+    if (fs.statSync(chosen).isDirectory()) return fs.realpathSync(chosen);
+  } catch {}
+  throw new Error('Der Cloud-Ordner ist derzeit nicht erreichbar.');
+}
+function preferredRoot() {
+  try { if (locations.preferred && fs.statSync(locations.preferred).isDirectory()) return locations.preferred; }
+  catch {}
+  return app.getPath('documents');
+}
+function requireNewDestination(destination, root, copy = false) {
+  const resolved = path.join(fs.realpathSync(path.dirname(destination)), path.basename(destination));
+  if (root && !folderContains(root, resolved)) throw new Error('Wähle einen Ordner innerhalb deines Cloud-Ordners.');
+  let source = path.resolve(folder);
+  try { source = fs.realpathSync(folder); } catch {}
+  if (copy && folderContains(source, resolved)) throw new Error('Wähle einen neuen Ordner außerhalb des Projektordners.');
+  if (fs.existsSync(resolved)) throw new Error('Wähle einen neuen Ordnernamen.');
+  return resolved;
+}
+async function writeProjectCopy(destination, draft) {
+  const snapshot = { ...validProject(draft), assets: state.assets };
+  const temp = destination + '.partial-' + randomUUID();
+  try {
+    await fsp.mkdir(temp);
+    await fsp.writeFile(path.join(temp, 'roman.json'), JSON.stringify(snapshot, null, 2));
+    const media = path.join(folder, 'Material');
+    if (fs.existsSync(media)) await fsp.cp(media, path.join(temp, 'Material'), { recursive: true });
+    await fsp.rename(temp, destination);
+  } finally {
+    await fsp.rm(temp, { recursive: true, force: true });
+  }
 }
 function asset(id) {
   const result = state.assets.find(entry => entry.id === id);
@@ -246,7 +309,7 @@ async function printPdf(html) {
 async function publish(format, manuscript) {
   if (format === 'preview') {
     const bytes = await printPdf(bookHtml(manuscript, manuscript.chapters, manuscript.settings, true));
-    const preview = new BrowserWindow({ parent: main, width: 860, height: 900, title: 'Satzvorschau', autoHideMenuBar: true,
+    const preview = new BrowserWindow({ parent: main, width: 1160, height: 840, minWidth: 540, title: 'Satzvorschau', autoHideMenuBar: true,
       webPreferences: { preload: path.join(__dirname, 'preview-preload.cjs'), contextIsolation: true, sandbox: true } });
     const id = preview.webContents.id;
     previewDocuments.set(id, { bytes, theme: manuscript.settings.theme });
@@ -294,13 +357,18 @@ async function publish(format, manuscript) {
 app.on('second-instance', () => { if (main) { if (main.isMinimized()) main.restore(); main.focus(); } });
 app.whenReady().then(() => {
   registry = path.join(app.getPath('userData'), 'zuletzt.json');
+  locationFile = path.join(app.getPath('userData'), 'speicherorte.json');
+  try { locations = normalizeLocations(JSON.parse(fs.readFileSync(locationFile, 'utf8'))); } catch {}
   fs.mkdirSync(app.getPath('userData'), { recursive: true });
+  let recent;
   try {
-    load(JSON.parse(fs.readFileSync(registry, 'utf8')).folder);
+    recent = JSON.parse(fs.readFileSync(registry, 'utf8')).folder;
+    load(recent);
   } catch {
     const dir = path.join(app.getPath('userData'), 'Beispielprojekt');
-    if (fs.existsSync(path.join(dir, 'roman.json'))) load(dir);
-    else initialize(dir, 'Der letzte Sommer', true);
+    if (typeof recent === 'string' && recent !== dir) unavailableProject = recent;
+    if (fs.existsSync(path.join(dir, 'roman.json'))) load(dir, !unavailableProject);
+    else initialize(dir, 'Der letzte Sommer', true, !unavailableProject);
   }
   main = new BrowserWindow({ width: 1540, height: 960, minWidth: 750, minHeight: 620, backgroundColor: '#f6f5ef', title: productName + ' ' + version, autoHideMenuBar: true, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, spellcheck: true } });
   main.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -343,41 +411,49 @@ app.whenReady().then(() => {
     return action(...args);
   });
   handle('get', () => state);
+  handle('unavailable-project', () => unavailableProject);
   handle('identity', () => ({ name: productName, version }));
   handle('save', save);
   ipcMain.on('flush', (event, draft) => {
     if (event.sender !== main.webContents) return;
     try { save(draft); event.returnValue = true; }
-    catch { event.returnValue = false; }
+    catch (error) { event.returnValue = error.message; }
   });
-  handle('new', async () => {
-    const choice = await dialog.showSaveDialog(main, { title: 'Projektordner anlegen', defaultPath: path.join(app.getPath('documents'), 'Mein Roman') });
+  handle('locations', () => locations);
+  handle('save-locations', input => {
+    const next = normalizeLocations(input);
+    atomic(locationFile, JSON.stringify(next, null, 2));
+    locations = next;
+    return next;
+  });
+  handle('choose-folder', async selected => {
+    const choice = await dialog.showOpenDialog(main, { title: 'Ordner auswählen', defaultPath: typeof selected === 'string' && path.isAbsolute(selected) ? selected : preferredRoot(), properties: ['openDirectory','createDirectory'] });
+    return choice.canceled ? null : choice.filePaths[0];
+  });
+  handle('new', async cloud => {
+    const root = cloud ? cloudRoot() : null;
+    const choice = await dialog.showSaveDialog(main, { title: 'Projektordner anlegen', defaultPath: path.join(root ?? preferredRoot(), 'Mein Roman') });
     if (choice.canceled) return null;
-    if (fs.existsSync(choice.filePath)) throw new Error('Wähle einen neuen Ordnernamen.');
-    return initialize(choice.filePath, path.basename(choice.filePath), false);
+    const destination = requireNewDestination(choice.filePath, root);
+    return initialize(destination, path.basename(destination), false);
   });
-  handle('open', async () => {
-    const choice = await dialog.showOpenDialog(main, { title: 'roman.json aus einem Projekt öffnen', properties: ['openFile'], filters: [{ name: 'Scripter-Projekt', extensions: ['json'] }] });
+  handle('open', async cloud => {
+    const root = cloud ? cloudRoot() : null;
+    const choice = await dialog.showOpenDialog(main, { title: 'roman.json aus einem Projekt öffnen', defaultPath: root ?? preferredRoot(), properties: ['openFile'], filters: [{ name: 'Scripter-Projekt', extensions: ['json'] }] });
     if (choice.canceled) return null;
     if (path.basename(choice.filePaths[0]) !== 'roman.json') throw new Error('Wähle die Datei „roman.json“ im Projektordner.');
-    return load(path.dirname(choice.filePaths[0]));
+    const dir = fs.realpathSync(path.dirname(choice.filePaths[0]));
+    if (root && !folderContains(root, dir)) throw new Error('Wähle ein Projekt innerhalb deines Cloud-Ordners.');
+    return load(dir);
   });
-  handle('backup', async () => {
-    const choice = await dialog.showSaveDialog(main, { title: 'Sicherung in neuem Ordner speichern', defaultPath: path.join(app.getPath('documents'), fileStem(state.title) + ' – Sicherung') });
-    if (choice.canceled) return false;
-    const destination = path.resolve(choice.filePath);
-    if (fs.existsSync(destination) || destination.startsWith(path.resolve(folder) + path.sep)) throw new Error('Wähle einen neuen Ordner außerhalb des Projektordners.');
-    const temp = destination + '.partial-' + randomUUID();
-    try {
-      await fsp.mkdir(temp);
-      await fsp.copyFile(manifest, path.join(temp, 'roman.json'));
-      const media = path.join(folder, 'Material');
-      if (fs.existsSync(media)) await fsp.cp(media, path.join(temp, 'Material'), { recursive: true });
-      await fsp.rename(temp, destination);
-      return true;
-    } finally {
-      await fsp.rm(temp, { recursive: true, force: true });
-    }
+  handle('backup', async (draft, cloud) => {
+    const root = cloud ? cloudRoot() : null;
+    const name = fileStem(draft.title) + (cloud ? '' : ' – Sicherung');
+    const choice = await dialog.showSaveDialog(main, { title: cloud ? 'Projekt als Cloud-Kopie speichern' : 'Sicherung in neuem Ordner speichern', defaultPath: path.join(root ?? preferredRoot(), name) });
+    if (choice.canceled) return null;
+    const destination = requireNewDestination(choice.filePath, root, true);
+    await writeProjectCopy(destination, draft);
+    return true;
   });
   handle('pick', async () => {
     const result = await dialog.showOpenDialog(main, { title: 'Material hinzufügen', properties: ['openFile','multiSelections'] });
@@ -408,7 +484,7 @@ app.whenReady().then(() => {
     const url = webAddress(value);
     if (!state.assets.some(item => item.url === url)) {
       state.assets.push({ id: randomUUID(), name: new URL(url).hostname, url, kind: 'web' });
-      persist();
+      try { persist(); } catch (error) { state.assets.pop(); throw error; }
     }
     return state.assets;
   });
@@ -422,8 +498,9 @@ app.whenReady().then(() => {
   handle('insert-asset', insertable);
   handle('remove-asset', id => {
     const item = asset(id);
-    state.assets = state.assets.filter(entry => entry.id !== id);
-    try { persist(); } catch (error) { state.assets.push(item); throw error; }
+    const previous = state.assets;
+    state.assets = previous.filter(entry => entry.id !== id);
+    try { persist(); } catch (error) { state.assets = previous; throw error; }
     if (item.file) fs.rmSync(assetPath(item), { force: true });
     return state.assets;
   });

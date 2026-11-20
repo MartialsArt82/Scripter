@@ -14,12 +14,16 @@ function project(title, demo = false) {
     first.intent = 'Clara findet den Brief. Der erste Hinweis führt zum Bahnhof.';
     first.html = '<p>Als Clara an jenem Morgen die Tür öffnete, lag ein Brief auf der Schwelle. Der Umschlag war feucht und an einer Ecke eingerissen. Sie erkannte die Schrift ihrer Schwester, obwohl sie seit zwölf Jahren keinen Brief mehr von ihr bekommen hatte.</p><p>Hinter den Häusern setzte sich der erste Zug in Bewegung. Clara blieb barfuß im Türrahmen stehen, bis das Geräusch der Räder verklungen war. Erst dann drehte sie den Umschlag um.</p><p>Auf der Rückseite stand nur eine Uhrzeit.</p>';
   }
-  return { version: 1, title, author: '', active: first.id, chapters: demo ? [first, chapter('Am Bahnsteig'), chapter('Die Rückkehr')] : [first], assets: [], storyboard: [], speechRules: [], settings: { ...defaults } };
+  return { version: 1, title, author: '', active: first.id, chapters: demo ? [first, chapter('Am Bahnsteig'), chapter('Die Rückkehr')] : [first], assets: [], storyboard: [], storyLinks: [], speechRules: [], settings: { ...defaults } };
 }
 function atomic(filename, value) {
-  const temp = filename + '.partial';
-  fs.writeFileSync(temp, value);
-  fs.renameSync(temp, filename);
+  const temp = filename + '.partial-' + crypto.randomUUID();
+  try {
+    fs.writeFileSync(temp, value, { flag: 'wx' });
+    fs.renameSync(temp, filename);
+  } finally {
+    fs.rmSync(temp, { force: true });
+  }
 }
 function validProject(value) {
   if (value?.version !== 1 || !Array.isArray(value.chapters) || !value.chapters.length || !Array.isArray(value.assets)) throw new Error('Diese Datei ist kein Scripter-Projekt.');
@@ -36,6 +40,13 @@ function validProject(value) {
     y: position(note.y),
     chapters: [...new Set(Array.isArray(note.chapters) ? note.chapters.filter(id => chapters.has(id)) : [])]
   }));
+  const notes = new Set(value.storyboard.map(note => note.id));
+  const existingLinks = new Set();
+  value.storyLinks = (Array.isArray(value.storyLinks) ? value.storyLinks : []).flatMap(link => {
+    if (typeof link?.id !== 'string' || existingLinks.has(link.id) || link.from === link.to || !notes.has(link.from) || !notes.has(link.to)) return [];
+    existingLinks.add(link.id);
+    return [{ id: link.id, from: link.from, to: link.to, color: ['green','blue','red','gold'].includes(link.color) ? link.color : 'green' }];
+  });
   value.speechRules = normalizeSpeechRules(value.speechRules);
   return value;
 }

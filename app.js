@@ -61,10 +61,11 @@ function queueSave() {
 function flush() {
   clearTimeout(saveTimer);
   if (!dirty || !state) return true;
-  const saved = window.desk.flush(state);
+  const result = window.desk.flush(state);
+  const saved = result === true;
   dirty = !saved;
   $('#save-status').textContent = saved ? 'Lokal gespeichert' : 'Speichern fehlgeschlagen';
-  if (!saved) toast('Das Projekt konnte nicht gespeichert werden. Prüfe den verfügbaren Speicherplatz und die Schreibrechte des Projektordners.', true);
+  if (!saved) toast(typeof result === 'string' ? result : 'Das Projekt konnte nicht gespeichert werden.', true);
   return saved;
 }
 function refreshMetrics() {
@@ -196,6 +197,7 @@ function startProject(next) {
   showView('editor');
 }
 function showView(name) {
+  if (view === 'storyboard' && name !== 'storyboard') cancelLink();
   view = name;
   if (name !== 'editor') document.body.classList.remove('focus');
   for (const button of $$('[data-view]')) {
@@ -278,20 +280,60 @@ function chapterOptions(id) {
     }, 'Löschen');
   };
 }
-function settingsDialog() {
+const cloudProviders = { google: 'Google Drive', onedrive: 'OneDrive', dropbox: 'Dropbox', icloud: 'iCloud Drive', other: 'Anderer Anbieter' };
+async function settingsDialog() {
   const settings = state.settings;
+  const locations = await window.desk.locations();
+  const locationField = (label, name) => `<div class="modal-field"><span>${label}</span><div class="location-field">
+    <input id="${name}-path" aria-label="${label}" readonly>
+    <button type="button" id="${name}-choose" class="secondary">Auswählen</button>
+    <button type="button" id="${name}-clear" class="text-button">Entfernen</button>
+  </div></div>`;
   openModal('Einstellungen', [
     field('Darstellung', `<select name="theme">${option('light','Hell',settings.theme)}${option('dark','Dunkel',settings.theme)}</select>`),
     field('Schrift für Manuskript und Buchsatz', `<select name="font">${fonts.map(font => option(font,font,settings.font)).join('')}</select>`),
     field('Bildschirmskalierung', `<select name="zoom">${[75,85,95,100,110,125,150].map(zoom => option(zoom,zoom + ' %',settings.zoom)).join('')}</select>`),
     field('Transkriptsprache', `<select name="speech">${Object.entries({auto:'Automatisch',de:'Deutsch',en:'Englisch'}).map(([lang,label]) => option(lang,label,settings.speech)).join('')}</select>`),
+    '<h3>Speicherorte</h3>',
+    locationField('Wunschort für neue lokale Projekte', 'preferred'),
+    '<h3>Cloud-Synchronisation</h3>',
+    field('Anbieter', `<select id="cloud-provider">${Object.entries(cloudProviders).map(([key,label]) => option(key,label,locations.provider)).join('')}</select>`),
+    locationField('Synchronisierter Ordner', 'cloud'),
+    '<p>Wähle einen lokal eingebundenen Ordner deines Anbieters. Sein Sync-Programm gleicht die Dateien ab. Im Projektmenü kannst du Cloud-Projekte anlegen, öffnen oder eine Kopie dorthin speichern.</p>',
     '<p>Für Diktat und Transkripte brauchst du Python 3.12. Bei der Einrichtung wird das mehrsprachige Whisper-Modell heruntergeladen. Die Erkennung läuft danach lokal.</p><button id="speech-setup" type="button" class="secondary">Spracherkennung einrichten</button><p id="setup-status" role="status"></p>'
-  ].join(''), data => {
+  ].join(''), async data => {
+    await window.desk.saveLocations(locations);
     for (const name of ['theme','font','speech']) settings[name] = data.get(name);
     settings.zoom = Number(data.get('zoom'));
     renderPreferences();
     queueSave();
   });
+  const refreshLocations = () => {
+    $('#preferred-path').value = locations.preferred;
+    $('#preferred-path').placeholder = 'Standardordner (Dokumente)';
+    $('#preferred-clear').disabled = !locations.preferred;
+    $('#cloud-path').value = locations.clouds[locations.provider] || '';
+    $('#cloud-path').placeholder = 'Ordner auswählen';
+    $('#cloud-clear').disabled = !locations.clouds[locations.provider];
+  };
+  $('#cloud-provider').onchange = event => { locations.provider = event.target.value; refreshLocations(); };
+  for (const mode of ['preferred','cloud']) {
+    const assign = (provider, value) => {
+      if (mode === 'preferred') locations.preferred = value;
+      else locations.clouds[provider] = value;
+      if ($('#' + mode + '-path')) refreshLocations();
+    };
+    $('#' + mode + '-choose').onclick = async () => {
+      const current = $('#' + mode + '-path');
+      const provider = locations.provider;
+      try {
+        const chosen = await window.desk.chooseFolder(current.value);
+        if (chosen && current.isConnected) assign(provider, chosen);
+      } catch (error) { errorToast(error); }
+    };
+    $('#' + mode + '-clear').onclick = () => assign(locations.provider, '');
+  }
+  refreshLocations();
   $('#speech-setup').onclick = async event => {
     const button = event.currentTarget;
     button.disabled = true;
@@ -456,7 +498,7 @@ $('#close-modal').onclick = $('#cancel-modal').onclick = () => { if (!$('#confir
 modal.addEventListener('cancel', event => { if ($('#confirm-modal').disabled) event.preventDefault(); });
 for (const button of $$('[data-view]')) button.onclick = () => showView(button.dataset.view);
 $('#new-chapter').onclick = $('#add-chapter').onclick = newChapter;
-$('#settings').onclick = $('#status-zoom').onclick = settingsDialog;
+$('#settings').onclick = $('#status-zoom').onclick = () => settingsDialog().catch(errorToast);
 $('#theme').onclick = () => {
   state.settings.theme = state.settings.theme === 'dark' ? 'light' : 'dark';
   renderPreferences();
@@ -506,19 +548,33 @@ for (const button of $$('[data-project]')) button.onclick = async () => {
     });
     return;
   }
+  await runProjectAction(action);
+};
+async function runProjectAction(action, discard = false) {
   if (projectDialogBusy || imports || recording || transcribing) return toast('Beende zuerst die laufende Projektaktion.');
-  if (!flush()) return;
+  const copy = ['backup', 'copy-cloud'].includes(action);
+  if (!copy && !discard && !flush()) {
+    openModal('Projekt wechseln?', '<p>Der aktuelle Arbeitsstand konnte nicht gespeichert werden. Sichere ihn im Projektmenü als Kopie, wenn du ihn behalten willst.</p>', async () => {
+      modal.close();
+      await runProjectAction(action, true);
+      return false;
+    }, 'Trotzdem wechseln');
+    return;
+  }
   projectDialogBusy = true;
   try {
-    if (action === 'backup') {
-      if (await window.desk.backup()) toast('Projektsicherung gespeichert.');
+    if (copy) {
+      if (await window.desk.backup(state, action === 'copy-cloud')) {
+        toast(action === 'copy-cloud' ? 'Cloud-Kopie gespeichert. Öffne sie über „Cloud-Projekt öffnen“.' : 'Projektsicherung gespeichert.');
+      }
     } else {
-      const next = await window.desk[action === 'new' ? 'newProject' : 'openProject']();
+      const method = action.startsWith('new') ? 'newProject' : 'openProject';
+      const next = await window.desk[method](action.endsWith('-cloud'));
       if (next) startProject(next);
     }
   } catch (error) { errorToast(error); }
   finally { projectDialogBusy = false; }
-};
+}
 $('#chapter-title').addEventListener('input', event => {
   chapter().title = event.target.value;
   renderChapters();
@@ -721,6 +777,9 @@ document.addEventListener('keydown', event => {
 });
 decorate();
 window.desk.get().then(startProject).catch(errorToast);
+window.desk.unavailableProject().then(path => {
+  if (path) toast('Das letzte Projekt ist derzeit nicht verfügbar. Öffne es erneut, sobald der Ordner erreichbar ist.\n' + path, true);
+}).catch(errorToast);
 window.desk.identity().then(({ name, version }) => {
   const title = name + ' ' + version;
   document.title = title;

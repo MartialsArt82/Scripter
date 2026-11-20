@@ -13,6 +13,10 @@
   <div class="project-selector"><button id="project-menu" class="project-button" aria-haspopup="true" aria-expanded="false"><span class="project-symbol" data-icon="book-open"></span><span class="project-text"><small>MEIN PROJEKT</small><strong id="project-name">Roman</strong></span><span data-icon="chevrons-up-down"></span></button>
     <div id="project-options" class="popover" hidden>
       <button data-project="new"><span data-icon="file-plus"></span> Neues Projekt</button><button data-project="open"><span data-icon="folder-open"></span> Projekt öffnen</button><button data-project="meta"><span data-icon="pencil"></span> Titel und Autor</button><button data-project="backup"><span data-icon="archive"></span> Projekt sichern</button>
+      <div class="project-menu-divider"></div>
+      <button data-project="new-cloud"><span data-icon="file-plus"></span> Neues Cloud-Projekt</button>
+      <button data-project="open-cloud"><span data-icon="folder-open"></span> Cloud-Projekt öffnen</button>
+      <button data-project="copy-cloud"><span data-icon="archive"></span> Kopie in Cloud-Ordner</button>
     </div>
   </div>
   <nav class="main-nav">
@@ -108,6 +112,8 @@
     <div class="storyboard-toolbar" aria-label="Storyboard-Ansicht">
       <button type="button" data-board-mode="board" aria-pressed="true">Pinnwand</button>
       <button type="button" data-board-mode="timeline" aria-pressed="false">Zeitleiste</button>
+      <label id="connection-color-label">Linienfarbe <select id="connection-color"><option value="green">Grün</option><option value="blue">Blau</option><option value="red">Rot</option><option value="gold">Gold</option></select></label>
+      <span id="board-instruction" role="status"></span>
     </div>
     <div id="storyboard-scroll" tabindex="0" aria-label="Pinnwand">
       <div id="storyboard-canvas">
