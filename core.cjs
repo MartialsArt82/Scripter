@@ -1,3 +1,4 @@
+const { normalizeProjectStyle, fontStack } = require('./appearance.js');
 const { normalizeSpeechRules } = require('./speech.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -7,14 +8,14 @@ const locales = { de: 'de-DE', en: 'en-US', es: 'es-ES', pt: 'pt-PT', fr: 'fr-FR
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const chapter = (title = 'Neues Kapitel') => ({ id: crypto.randomUUID(), title, goal: 1500, intent: '', html: '' });
 const defaults = { theme: 'light', font: 'Georgia', zoom: 100, lang: 'de', speech: 'auto', trim: 'trade', margins: 19, size: 11, leading: 1.5, pageNumbers: true };
-function project(title, demo = false) {
+function project(title, demo = false, style) {
   const first = chapter(demo ? 'Der Brief' : 'Kapitel 1');
   if (demo) {
     first.goal = 1200;
     first.intent = 'Clara findet den Brief. Der erste Hinweis führt zum Bahnhof.';
     first.html = '<p>Als Clara an jenem Morgen die Tür öffnete, lag ein Brief auf der Schwelle. Der Umschlag war feucht und an einer Ecke eingerissen. Sie erkannte die Schrift ihrer Schwester, obwohl sie seit zwölf Jahren keinen Brief mehr von ihr bekommen hatte.</p><p>Hinter den Häusern setzte sich der erste Zug in Bewegung. Clara blieb barfuß im Türrahmen stehen, bis das Geräusch der Räder verklungen war. Erst dann drehte sie den Umschlag um.</p><p>Auf der Rückseite stand nur eine Uhrzeit.</p>';
   }
-  return { version: 1, title, author: '', active: first.id, chapters: demo ? [first, chapter('Am Bahnsteig'), chapter('Die Rückkehr')] : [first], assets: [], storyboard: [], storyLinks: [], speechRules: [], settings: { ...defaults } };
+  return { version: 1, title, author: '', ...normalizeProjectStyle(style), active: first.id, chapters: demo ? [first, chapter('Am Bahnsteig'), chapter('Die Rückkehr')] : [first], assets: [], storyboard: [], storyLinks: [], speechRules: [], settings: { ...defaults } };
 }
 function atomic(filename, value) {
   const temp = filename + '.partial-' + crypto.randomUUID();
@@ -27,6 +28,7 @@ function atomic(filename, value) {
 }
 function validProject(value) {
   if (value?.version !== 1 || !Array.isArray(value.chapters) || !value.chapters.length || !Array.isArray(value.assets)) throw new Error('Diese Datei ist kein Scripter-Projekt.');
+  Object.assign(value, normalizeProjectStyle(value));
   const chapters = new Set(value.chapters.map(chapter => chapter.id));
   const position = number => Math.round(Math.max(0, Math.min(100000, Number(number) || 0)));
   value.storyboard = (Array.isArray(value.storyboard) ? value.storyboard : []).filter(note => typeof note?.id === 'string').map(note => ({
@@ -51,17 +53,30 @@ function validProject(value) {
   return value;
 }
 const trims = { trade: [135, 215], pocket: [120, 190], a5: [148, 210], a4: [210, 297], us: [152.4, 228.6] };
+let courierStyle;
+function embeddedCourier() {
+  if (!courierStyle) {
+    courierStyle = [['Regular','normal',400], ['Italic','italic',400], ['Bold','normal',700], ['BoldItalic','italic',700]]
+      .map(([file, style, weight]) => {
+        const bytes = fs.readFileSync(path.join(__dirname, 'fonts', 'CourierPrime-' + file + '.ttf'));
+        return `@font-face{font-family:"Courier Prime";font-style:${style};font-weight:${weight};src:url(data:font/ttf;base64,${bytes.toString('base64')}) format("truetype")}`;
+      }).join('\n');
+  }
+  return courierStyle;
+}
 function bookHtml(meta, chapters, settings, print = false) {
   const [width, height] = trims[settings.trim] || trims.trade;
   const margin = Math.min(35, Math.max(11, Number(settings.margins) || 19));
   const size = Math.min(20, Math.max(8, Number(settings.size) || 11));
   const leading = Math.min(2.2, Math.max(1.1, Number(settings.leading) || 1.5));
-  const font = ['Georgia', 'Palatino', 'Times New Roman', 'Garamond', 'Arial', 'Verdana'].includes(settings.font) ? settings.font : 'Georgia';
+  const font = fontStack(settings.font);
+  const fontFaces = settings.font === 'Courier Prime' ? embeddedCourier() : '';
   const pageNumbers = print && settings.pageNumbers ? '@bottom-center { content: counter(page); font: 9pt Georgia; }' : '';
   return `<!doctype html><html lang="${locales[settings.lang] || 'de-DE'}"><head><meta charset="utf-8"><title>${escape(meta.title)}</title><meta name="author" content="${escape(meta.author)}"><style>
+  ${fontFaces}
   @page {size: ${width}mm ${height}mm; margin: ${margin}mm; ${pageNumbers}}
   @page :first { @bottom-center { content: none; } }
-  body { margin: 0; color: #1c1d1b; font: ${size}pt "${font}", serif; line-height:${leading}; overflow-wrap: anywhere; }
+  body { margin: 0; color: #1c1d1b; font: ${size}pt ${font}; line-height:${leading}; overflow-wrap: anywhere; }
   .front { text-align: center; padding-top: 26%; }
   h1,h2,h3 { line-height: 1.15; break-after: avoid; }
   h1 { font-size: 2.25em; } h2 { font-size: 1.65em; margin: 1em 0 1.6em; } h3{font-size:1.25em}

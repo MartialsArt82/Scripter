@@ -7,7 +7,7 @@ const modal = $('#modal');
 const langs = { de: 'Deutsch', en: 'Englisch', es: 'Spanisch', pt: 'Portugiesisch', fr: 'Französisch' };
 const types = { text: 'Textdatei', image: 'Bild', pdf: 'PDF', audio: 'Audio', video: 'Video', web: 'Webseite', file: 'Datei' };
 const icons = { text: 'file-text', image: 'image', pdf: 'file-text', audio: 'headphones', video: 'video', web: 'globe', file: 'file' };
-const fonts = ['Georgia', 'Palatino', 'Times New Roman', 'Garamond', 'Arial', 'Verdana'];
+let readingAccess = appearance.normalizeAccess();
 const exportsList = { pdf: 'PDF · Buchsatz', docx: 'DOCX · Word', doc: 'DOC · Word 97–2003', odt: 'ODT · OpenDocument', epub: 'EPUB 3 · E-Book', rtf: 'RTF · Rich Text', txt: 'TXT · Reintext', markdown: 'Markdown', html: 'HTML', latex: 'LaTeX', icml: 'ICML · Adobe InCopy' };
 const trueWords = /[\p{L}\p{N}]+(?:[’'\-][\p{L}\p{N}]+)*/gu;
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -33,11 +33,10 @@ let dirty = false;
 function decorate(root = document) {
   for (const node of root.querySelectorAll('[data-icon]')) {
     if (node.firstElementChild) continue;
-    const image = document.createElement('img');
-    image.src = 'icons/' + node.dataset.icon + '.svg';
+    const image = document.createElement('span');
+    image.style.setProperty('--icon-image', `url("icons/${node.dataset.icon}.svg")`);
     image.className = 'svg-icon';
-    image.alt = '';
-    image.draggable = false;
+    image.setAttribute('aria-hidden', 'true');
     node.append(image);
   }
 }
@@ -92,6 +91,13 @@ function edited() {
 }
 function renderProject() {
   $('#project-name').textContent = state.title;
+  const category = appearance.categories[state.category] ?? appearance.categories.general;
+  $('#project-category').textContent = category.label;
+  const symbol = $('#project-menu .project-symbol');
+  symbol.dataset.icon = category.icon;
+  symbol.replaceChildren();
+  decorate($('#project-menu'));
+  applyAppearance(state.accent, state.settings.theme, readingAccess);
   $('#crumb-project').textContent = state.title;
   $('#book-cover h2').textContent = state.title;
   $('#book-cover p').textContent = state.author;
@@ -117,16 +123,17 @@ function renderChapter() {
 }
 function renderPreferences() {
   const settings = state.settings;
-  document.documentElement.dataset.theme = settings.theme;
-  document.documentElement.style.setProperty('--manuscript-font', '"' + (fonts.includes(settings.font) ? settings.font : 'Georgia') + '"');
+  applyAppearance(state.accent, settings.theme, readingAccess);
+  document.documentElement.style.setProperty('--manuscript-font', appearance.fontStack(settings.font));
   editor.lang = settings.lang;
   $('#spell-language').value = settings.lang;
   $('#dictionary-language').value = settings.lang;
   $('#theme').replaceChildren();
   $('#theme').dataset.icon = settings.theme === 'dark' ? 'sun' : 'moon';
   decorate();
-  $('#status-zoom').textContent = settings.zoom + ' %';
-  window.desk.zoom(settings.zoom).catch(errorToast);
+  const zoom = readingAccess.zoom ?? settings.zoom;
+  $('#status-zoom').textContent = zoom + ' %';
+  window.desk.zoom(zoom).catch(errorToast);
   window.desk.spell([], settings.lang).catch(errorToast);
 }
 function paragraphs(text) {
@@ -284,6 +291,7 @@ const cloudProviders = { google: 'Google Drive', onedrive: 'OneDrive', dropbox: 
 async function settingsDialog() {
   const settings = state.settings;
   const locations = await window.desk.locations();
+  const access = appearance.normalizeAccess(locations.access);
   const locationField = (label, name) => `<div class="modal-field"><span>${label}</span><div class="location-field">
     <input id="${name}-path" aria-label="${label}" readonly>
     <button type="button" id="${name}-choose" class="secondary">Auswählen</button>
@@ -291,8 +299,9 @@ async function settingsDialog() {
   </div></div>`;
   openModal('Einstellungen', [
     field('Darstellung', `<select name="theme">${option('light','Hell',settings.theme)}${option('dark','Dunkel',settings.theme)}</select>`),
-    field('Schrift für Manuskript und Buchsatz', `<select name="font">${fonts.map(font => option(font,font,settings.font)).join('')}</select>`),
-    field('Bildschirmskalierung', `<select name="zoom">${[75,85,95,100,110,125,150].map(zoom => option(zoom,zoom + ' %',settings.zoom)).join('')}</select>`),
+    fontPreview(settings.font),
+    field('Bildschirmskalierung', `<select name="zoom">${appearance.zoomLevels.map(zoom => option(zoom,zoom + ' %',access.zoom ?? settings.zoom)).join('')}</select>`),
+    accessibilityFields(access),
     field('Transkriptsprache', `<select name="speech">${Object.entries({auto:'Automatisch',de:'Deutsch',en:'Englisch'}).map(([lang,label]) => option(lang,label,settings.speech)).join('')}</select>`),
     '<h3>Speicherorte</h3>',
     locationField('Wunschort für neue lokale Projekte', 'preferred'),
@@ -302,12 +311,23 @@ async function settingsDialog() {
     '<p>Wähle einen lokal eingebundenen Ordner deines Anbieters. Sein Sync-Programm gleicht die Dateien ab. Im Projektmenü kannst du Cloud-Projekte anlegen, öffnen oder eine Kopie dorthin speichern.</p>',
     '<p>Für Diktat und Transkripte brauchst du Python 3.12. Bei der Einrichtung wird das mehrsprachige Whisper-Modell heruntergeladen. Die Erkennung läuft danach lokal.</p><button id="speech-setup" type="button" class="secondary">Spracherkennung einrichten</button><p id="setup-status" role="status"></p>'
   ].join(''), async data => {
-    await window.desk.saveLocations(locations);
+    locations.access = appearance.normalizeAccess({
+      zoom: Number(data.get('zoom')), textSize: Number(data.get('textSize')), lineHeight: Number(data.get('lineHeight')),
+      highContrast: data.has('highContrast'), strongFocus: data.has('strongFocus'), reduceMotion: data.has('reduceMotion')
+    });
+    readingAccess = (await window.desk.saveLocations(locations)).access;
     for (const name of ['theme','font','speech']) settings[name] = data.get(name);
-    settings.zoom = Number(data.get('zoom'));
+    settings.zoom = readingAccess.zoom;
     renderPreferences();
+    renderLayout();
     queueSave();
   });
+  $('#font-picker').onchange = event => {
+    if (event.target.name !== 'font') return;
+    const name = event.target.value;
+    $('#selected-font').textContent = name;
+    $('#selected-font').style.fontFamily = appearance.fontStack(name);
+  };
   const refreshLocations = () => {
     $('#preferred-path').value = locations.preferred;
     $('#preferred-path').placeholder = 'Standardordner (Dokumente)';
@@ -425,7 +445,7 @@ function renderLayout() {
   form.elements.pageNumbers.checked = settings.pageNumbers;
   const ratios = { trade: '.628', pocket: '.632', a5: '.705', a4: '.707', us: '.667' };
   $('#book-cover').style.setProperty('--ratio', ratios[settings.trim] || '.628');
-  $('#book-cover').style.fontFamily = fonts.includes(settings.font) ? settings.font : 'Georgia';
+  $('#book-cover').style.fontFamily = appearance.fontStack(settings.font);
   $('#book-cover h2').style.fontFamily = 'inherit';
 }
 function manuscript(scope = 'book') {
@@ -538,25 +558,39 @@ document.addEventListener('click', event => {
 for (const button of $$('[data-project]')) button.onclick = async () => {
   const action = button.dataset.project;
   if (action === 'meta') {
-    openModal('Projektangaben', field('Romantitel', `<input name="title" value="${esc(state.title)}" maxlength="180" required>`) + field('Autorin oder Autor', `<input name="author" value="${esc(state.author)}" maxlength="180">`), data => {
+    openModal('Projektangaben', field('Romantitel', `<input name="title" value="${esc(state.title)}" maxlength="180" required>`) + field('Autorin oder Autor', `<input name="author" value="${esc(state.author)}" maxlength="180">`) + projectFields(state), data => {
       const title = String(data.get('title')).trim();
       if (!title) throw new Error('Bitte gib einen Romantitel ein.');
       state.title = title;
       state.author = String(data.get('author')).trim();
+      Object.assign(state, appearance.normalizeProjectStyle(Object.fromEntries(data)));
       renderProject();
       queueSave();
     });
+    bindProjectFields();
+    return;
+  }
+  if (action === 'new' || action === 'new-cloud') {
+    openModal(action === 'new-cloud' ? 'Neues Cloud-Projekt' : 'Neues Projekt',
+      field('Projekttitel', '<input name="title" maxlength="180" placeholder="Mein Roman" autofocus>') + projectFields(),
+      async data => {
+        const details = Object.fromEntries(data);
+        modal.close();
+        await runProjectAction(action, false, details);
+        return false;
+      }, 'Speicherort wählen');
+    bindProjectFields();
     return;
   }
   await runProjectAction(action);
 };
-async function runProjectAction(action, discard = false) {
+async function runProjectAction(action, discard = false, details) {
   if (projectDialogBusy || imports || recording || transcribing) return toast('Beende zuerst die laufende Projektaktion.');
   const copy = ['backup', 'copy-cloud'].includes(action);
   if (!copy && !discard && !flush()) {
     openModal('Projekt wechseln?', '<p>Der aktuelle Arbeitsstand konnte nicht gespeichert werden. Sichere ihn im Projektmenü als Kopie, wenn du ihn behalten willst.</p>', async () => {
       modal.close();
-      await runProjectAction(action, true);
+      await runProjectAction(action, true, details);
       return false;
     }, 'Trotzdem wechseln');
     return;
@@ -569,7 +603,7 @@ async function runProjectAction(action, discard = false) {
       }
     } else {
       const method = action.startsWith('new') ? 'newProject' : 'openProject';
-      const next = await window.desk[method](action.endsWith('-cloud'));
+      const next = await window.desk[method](action.endsWith('-cloud'), details);
       if (next) startProject(next);
     }
   } catch (error) { errorToast(error); }
@@ -776,11 +810,19 @@ document.addEventListener('keydown', event => {
   if (event.key === 'Escape' && document.body.classList.contains('focus')) toggleFocus();
 });
 decorate();
-window.desk.get().then(startProject).catch(errorToast);
+Promise.all([window.desk.get(), window.desk.locations()]).then(([project, locations]) => {
+  readingAccess = appearance.normalizeAccess(locations.access);
+  startProject(project);
+}).catch(errorToast);
 window.desk.unavailableProject().then(path => {
   if (path) toast('Das letzte Projekt ist derzeit nicht verfügbar. Öffne es erneut, sobald der Ordner erreichbar ist.\n' + path, true);
 }).catch(errorToast);
-window.desk.identity().then(({ name, version }) => {
+for (const button of $$('[data-window-action]')) {
+  button.onclick = () => window.desk.windowControl(button.dataset.windowAction).then(updateWindowControls).catch(errorToast);
+}
+window.desk.onWindowState(updateWindowControls);
+window.desk.identity().then(({ name, version, window: status }) => {
+  updateWindowControls(status);
   const title = name + ' ' + version;
   document.title = title;
   $('#app-brand').textContent = title;

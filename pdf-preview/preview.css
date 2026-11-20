@@ -27,3 +27,12 @@ canvas,.blank-page{display:block;width:100%;height:100%}
 .leaf-face{position:absolute;inset:0;backface-visibility:hidden;box-shadow:0 5px 16px #20190e22}
 .leaf-face.rear{transform:rotateY(180deg)}
 .sr-only{position:absolute;top:0;left:0;margin:0;width:1px;height:1px;clip-path:inset(50%);overflow:hidden;white-space:nowrap}
+
+.custom-window header{-webkit-app-region:drag}
+.custom-window header :is(button,input,label,select){-webkit-app-region:no-drag}
+#preview-window-buttons{display:flex;gap:4px;margin-left:6px;padding-left:6px;border-left:1px solid var(--border);-webkit-app-region:no-drag}
+#preview-window-buttons [data-action=close]:hover{background:#9d293c;color:#fff}
+[data-high-contrast=true]{--surface:#fff;--border:#343434;background:#fff;color:#101010}
+[data-theme=dark][data-high-contrast=true]{--surface:#101010;--border:#c6c6c6;background:#101010;color:#fff}
+[data-strong-focus=true] :focus-visible{outline:3px solid currentColor;outline-offset:3px}
+@media(max-width:690px){header{padding:0 9px;gap:4px}.tools,.tools label{gap:4px}.tools .zoom{margin-left:0}.zoom select{max-width:89px}}

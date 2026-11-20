@@ -2,7 +2,7 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 const call = (channel, ...args) => ipcRenderer.invoke(channel, ...args);
 contextBridge.exposeInMainWorld('desk', {
   get: () => call('get'), identity: () => call('identity'), save: project => call('save', project), flush: project => ipcRenderer.sendSync('flush', project),
-  newProject: cloud => call('new', cloud), openProject: cloud => call('open', cloud), backup: (draft, cloud) => call('backup', draft, cloud),
+  newProject: (cloud, details) => call('new', cloud, details), openProject: cloud => call('open', cloud), backup: (draft, cloud) => call('backup', draft, cloud),
   unavailableProject: () => call('unavailable-project'), locations: () => call('locations'), saveLocations: value => call('save-locations', value), chooseFolder: path => call('choose-folder', path),
   pick: () => call('pick'), add: files => call('add', files), path: file => webUtils.getPathForFile(file),
   addLink: url => call('link', url), openAsset: id => call('open-asset', id), insertAsset: id => call('insert-asset', id),
@@ -13,5 +13,7 @@ contextBridge.exposeInMainWorld('desk', {
   publish: (format, manuscript) => call('publish', format, manuscript),
   transcribe: (source, lang) => call('transcribe', source, lang),
   refreshTranscript: value => call('refresh-transcript', value), setup: () => call('setup'),
+  windowControl: action => call('window-control', action),
+  onWindowState: callback => { ipcRenderer.on('window-state', (_, value) => callback(value)); },
   help: () => call('help')
 });

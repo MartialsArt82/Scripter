@@ -9,6 +9,7 @@ const left = get('left');
 const right = get('right');
 const status = get('status');
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+let motionDisabled = false;
 let pdf, pageSize, current, pending, requestedPage = 1, painting = false;
 
 GlobalWorkerOptions.workerSrc = new URL('pdf.worker.min.mjs', import.meta.url).href;
@@ -84,7 +85,7 @@ async function showSpread(requested, animate = true) {
       book.style.setProperty('--page-width', size.width + 'px');
       book.style.setProperty('--page-height', size.height + 'px');
       get('book-space').hidden = false;
-      if (current && animate && !reduceMotion.matches && Math.abs(spread - current.spread) === 2
+      if (current && animate && !motionDisabled && !reduceMotion.matches && Math.abs(spread - current.spread) === 2
         && current.size.width === size.width && current.size.height === size.height) {
         await turn(spread - current.spread, left.firstChild, right.firstChild, nextLeft, nextRight);
       }
@@ -116,9 +117,30 @@ document.addEventListener('keydown', event => {
   if (event.key === 'ArrowRight') { event.preventDefault(); next(); }
 });
 
+function updateWindowControls(status) {
+  const controls = get('preview-window-buttons');
+  controls.hidden = !status.linuxControls;
+  document.body.classList.toggle('custom-window', status.linuxControls);
+  const maximize = controls.querySelector('[data-action="toggle-maximize"]');
+  const label = status.maximized ? 'Fenster wiederherstellen' : 'Fenster maximieren';
+  maximize.textContent = status.maximized ? '❐' : '□';
+  maximize.setAttribute('aria-label', label);
+  maximize.title = label;
+}
+for (const button of get('preview-window-buttons').querySelectorAll('button')) {
+  button.onclick = () => window.previewData.windowControl(button.dataset.action).then(updateWindowControls).catch(error => {
+    status.textContent = error.message;
+    status.hidden = false;
+  });
+}
+window.previewData.onWindowState(updateWindowControls);
 try {
-  const { bytes, theme } = await window.previewData.get();
+  const { bytes, theme, access, window: windowStatus } = await window.previewData.get();
+  updateWindowControls(windowStatus);
   document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : 'light';
+  document.documentElement.dataset.highContrast = String(access.highContrast);
+  document.documentElement.dataset.strongFocus = String(access.strongFocus);
+  motionDisabled = access.reduceMotion;
   pdf = await getDocument({ data: new Uint8Array(bytes), isEvalSupported: false, useWasm: false }).promise;
   pageSize = (await pdf.getPage(1)).getViewport({ scale: 1 });
   pageNumber.max = pdf.numPages;

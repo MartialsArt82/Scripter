@@ -7,6 +7,7 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { randomUUID } = require('node:crypto');
 const { applySpeechRules, voiceHints } = require('./speech.cjs');
+const { normalizeAccess } = require('./appearance.js');
 const { productName, version } = require('./package.json');
 const { atomic, bookHtml, escape, locales, project, validProject } = require('./core.cjs');
 
@@ -59,7 +60,7 @@ const formats = {
 const cloudProviders = new Set(['google','onedrive','dropbox','icloud','other']);
 let main, folder, manifest, manifestContents, registry, locationFile, state, thesaurus, whisperBusy = false;
 let unavailableProject = '';
-let locations = { preferred: '', provider: 'google', clouds: {} };
+let locations = normalizeLocations();
 
 function remember() {
   atomic(registry, JSON.stringify({ folder }));
@@ -75,10 +76,10 @@ function load(dir, rememberProject = true) {
   if (rememberProject) remember();
   return state;
 }
-function initialize(dir, title, demo, rememberProject = true) {
+function initialize(dir, title, demo, rememberProject = true, style) {
   fs.mkdirSync(path.join(dir, 'Material'), { recursive: true });
   const filename = path.join(dir, 'roman.json');
-  fs.writeFileSync(filename, JSON.stringify(project(title, demo), null, 2), { flag: 'wx' });
+  fs.writeFileSync(filename, JSON.stringify(project(title, demo, style), null, 2), { flag: 'wx' });
   return load(dir, rememberProject);
 }
 function persist() {
@@ -105,6 +106,7 @@ function normalizeLocations(value) {
   return {
     preferred: knownPath(value?.preferred),
     provider: cloudProviders.has(value?.provider) ? value.provider : 'google',
+    access: normalizeAccess(value?.access),
     clouds: Object.fromEntries([...cloudProviders].map(key => [key, knownPath(value?.clouds?.[key])]))
   };
 }
@@ -191,6 +193,16 @@ async function executable(name, candidates) {
 const pandoc = () => executable('Pandoc', [process.env.ROMAN_PANDOC, path.join(process.resourcesPath, process.platform === 'win32' ? 'pandoc.exe' : 'pandoc'), 'pandoc', '/opt/homebrew/bin/pandoc', '/usr/local/bin/pandoc', path.join(process.env.LOCALAPPDATA || os.homedir(), 'Pandoc', 'pandoc.exe'), 'C:\\Program Files\\Pandoc\\pandoc.exe'].filter(Boolean));
 const office = () => executable('LibreOffice', ['soffice', '/Applications/LibreOffice.app/Contents/MacOS/soffice', 'C:\\Program Files\\LibreOffice\\program\\soffice.com', 'C:\\Program Files (x86)\\LibreOffice\\program\\soffice.com']);
 const tempDir = () => fsp.mkdtemp(path.join(app.getPath('temp'), 'scripter-'));
+const isLinux = process.platform === 'linux';
+function describeWindow(win) {
+  return { linuxControls: isLinux, maximized: win.isMaximized() };
+}
+function registerWindowState(win) {
+  if (!isLinux) return;
+  for (const event of ['maximize','unmaximize','restore']) {
+    win.on(event, () => { if (!win.isDestroyed()) win.webContents.send('window-state', describeWindow(win)); });
+  }
+}
 const isMac = process.platform === 'darwin';
 const isWin = process.platform === 'win32';
 const voiceDir = () => path.join(app.getPath('userData'), 'sprache');
@@ -309,10 +321,11 @@ async function printPdf(html) {
 async function publish(format, manuscript) {
   if (format === 'preview') {
     const bytes = await printPdf(bookHtml(manuscript, manuscript.chapters, manuscript.settings, true));
-    const preview = new BrowserWindow({ parent: main, width: 1160, height: 840, minWidth: 540, title: 'Satzvorschau', autoHideMenuBar: true,
+    const preview = new BrowserWindow({ parent: main, width: 1160, height: 840, minWidth: 540, frame: !isLinux, title: 'Satzvorschau', autoHideMenuBar: true,
       webPreferences: { preload: path.join(__dirname, 'preview-preload.cjs'), contextIsolation: true, sandbox: true } });
     const id = preview.webContents.id;
-    previewDocuments.set(id, { bytes, theme: manuscript.settings.theme });
+    previewDocuments.set(id, { bytes, theme: manuscript.settings.theme, access: locations.access, window: describeWindow(preview) });
+    registerWindowState(preview);
     preview.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     preview.webContents.on('will-navigate', event => event.preventDefault());
     preview.on('closed', () => previewDocuments.delete(id));
@@ -370,7 +383,8 @@ app.whenReady().then(() => {
     if (fs.existsSync(path.join(dir, 'roman.json'))) load(dir, !unavailableProject);
     else initialize(dir, 'Der letzte Sommer', true, !unavailableProject);
   }
-  main = new BrowserWindow({ width: 1540, height: 960, minWidth: 750, minHeight: 620, backgroundColor: '#f6f5ef', title: productName + ' ' + version, autoHideMenuBar: true, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, spellcheck: true } });
+  main = new BrowserWindow({ width: 1540, height: 960, minWidth: 750, minHeight: 620, frame: !isLinux, backgroundColor: '#f6f5ef', title: productName + ' ' + version, autoHideMenuBar: true, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, spellcheck: true } });
+  registerWindowState(main);
   main.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   main.webContents.on('will-navigate', event => event.preventDefault());
   session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => callback(contents === main.webContents && permission === 'media' && details.mediaTypes?.includes('audio') && !details.mediaTypes?.includes('video')));
@@ -395,6 +409,17 @@ app.whenReady().then(() => {
     const mime = file.endsWith('.html') ? 'text/html' : file.endsWith('.css') ? 'text/css' : 'text/javascript';
     return new Response(await fsp.readFile(path.join(__dirname, 'pdf-preview', file)), { headers: { 'Content-Type': mime + '; charset=utf-8' } });
   });
+  ipcMain.handle('window-control', (event, action) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!isLinux || !win || event.senderFrame?.parent || (win !== main && !previewDocuments.has(event.sender.id))) throw new Error('Fenstersteuerung nicht verfügbar.');
+    if (action === 'minimize') win.minimize();
+    else if (action === 'toggle-maximize') {
+      if (win.isMaximized()) win.unmaximize();
+      else win.maximize();
+    } else if (action === 'close') setImmediate(() => { if (!win.isDestroyed()) win.close(); });
+    else if (action !== 'get') throw new Error('Unbekannte Fensteraktion.');
+    return describeWindow(win);
+  });
   ipcMain.handle('preview-pdf', event => {
     if (event.senderFrame?.parent || !previewDocuments.has(event.sender.id)) throw new Error('Satzvorschau ist nicht verfügbar.');
     return previewDocuments.get(event.sender.id);
@@ -412,7 +437,7 @@ app.whenReady().then(() => {
   });
   handle('get', () => state);
   handle('unavailable-project', () => unavailableProject);
-  handle('identity', () => ({ name: productName, version }));
+  handle('identity', () => ({ name: productName, version, window: describeWindow(main) }));
   handle('save', save);
   ipcMain.on('flush', (event, draft) => {
     if (event.sender !== main.webContents) return;
@@ -430,12 +455,14 @@ app.whenReady().then(() => {
     const choice = await dialog.showOpenDialog(main, { title: 'Ordner auswählen', defaultPath: typeof selected === 'string' && path.isAbsolute(selected) ? selected : preferredRoot(), properties: ['openDirectory','createDirectory'] });
     return choice.canceled ? null : choice.filePaths[0];
   });
-  handle('new', async cloud => {
+  handle('new', async (cloud, details) => {
     const root = cloud ? cloudRoot() : null;
-    const choice = await dialog.showSaveDialog(main, { title: 'Projektordner anlegen', defaultPath: path.join(root ?? preferredRoot(), 'Mein Roman') });
+    const title = typeof details?.title === 'string' ? details.title.trim().slice(0, 180) : '';
+    const suggestedFolder = title ? fileStem(title) : 'Mein Roman';
+    const choice = await dialog.showSaveDialog(main, { title: 'Projektordner anlegen', defaultPath: path.join(root ?? preferredRoot(), suggestedFolder) });
     if (choice.canceled) return null;
     const destination = requireNewDestination(choice.filePath, root);
-    return initialize(destination, path.basename(destination), false);
+    return initialize(destination, title || path.basename(destination), false, true, details);
   });
   handle('open', async cloud => {
     const root = cloud ? cloudRoot() : null;
@@ -533,7 +560,7 @@ app.whenReady().then(() => {
     try { persist(); } catch (error) { item.transcript = previous; throw error; }
     return state.assets;
   });
-  handle('zoom', value => main.webContents.setZoomFactor(Math.max(.75, Math.min(1.5, Number(value) / 100 || 1))));
+  handle('zoom', value => main.webContents.setZoomFactor(Math.max(.75, Math.min(2, Number(value) / 100 || 1))));
   handle('setup', setupWhisper);
   handle('refresh-transcript', value => applySpeechRules(value, state.speechRules));
   handle('transcribe', transcript);

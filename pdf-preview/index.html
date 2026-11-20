@@ -16,6 +16,11 @@
       <span id="total"></span>
       <button id="next" aria-label="Zur nächsten Doppelseite" disabled>›</button>
       <label class="zoom">Zoom <select id="zoom"><option value=".75">75 %</option><option value="1" selected>Einpassen</option><option value="1.25">125 %</option><option value="1.5">150 %</option><option value="2">200 %</option></select></label>
+      <div id="preview-window-buttons" role="group" aria-label="Fenstersteuerung" hidden>
+        <button data-action="minimize" aria-label="Fenster minimieren" title="Minimieren">−</button>
+        <button data-action="toggle-maximize" aria-label="Fenster maximieren" title="Maximieren">□</button>
+        <button data-action="close" aria-label="Fenster schließen" title="Schließen">×</button>
+      </div>
     </div>
   </header>
   <main id="reader">
