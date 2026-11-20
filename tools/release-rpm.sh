@@ -13,7 +13,7 @@ cp packaging/linux/de.scripter.Scripter.{desktop,svg} "$scratch/SOURCES/"
 
 desktop-file-validate "$scratch/SOURCES/de.scripter.Scripter.desktop"
 rpmbuild --define "_topdir $scratch" --define "scripter_version $version" \
-  --define "_binary_payload w7.xzdio" -bb packaging/linux/scripter.spec
+  --define "_binary_payload w7.zstdio" -bb packaging/linux/scripter.spec
 
 rpmfile="$scratch/RPMS/x86_64/scripter-$version-1.x86_64.rpm"
 rpm -K --nosignature "$rpmfile"

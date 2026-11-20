@@ -8,4 +8,4 @@ Icon=de.scripter.Scripter
 Terminal=false
 Categories=Office;WordProcessor;
 StartupNotify=true
-StartupWMClass=de.scripter.Scripter
+StartupWMClass=Scripter
