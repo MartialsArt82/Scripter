@@ -5,18 +5,23 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: romanasset:; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; connect-src 'none'; media-src blob:">
 <title>Scripter</title>
 <link rel="stylesheet" href="fonts/fonts.css"><link rel="stylesheet" href="style.css">
-<script defer src="node_modules/dompurify/dist/purify.min.js"></script><script defer src="app.js"></script>
+<script defer src="node_modules/dompurify/dist/purify.min.js"></script><script defer src="appearance.js"></script><script defer src="appearance-ui.js"></script><script defer src="app.js"></script><script defer src="speech-ui.js"></script><script defer src="storyboard.js"></script>
 </head>
 <body>
 <aside class="sidebar" aria-label="Projektnavigation">
   <div class="brand"><span class="brand-mark" data-icon="feather"></span><span id="app-brand">Scripter</span></div>
-  <div class="project-selector"><button id="project-menu" class="project-button" aria-haspopup="true" aria-expanded="false"><span class="project-symbol" data-icon="book-open"></span><span class="project-text"><small>MEIN PROJEKT</small><strong id="project-name">Roman</strong></span><span data-icon="chevrons-up-down"></span></button>
+  <div class="project-selector"><button id="project-menu" class="project-button" aria-haspopup="true" aria-expanded="false"><span class="project-symbol" data-icon="book-open"></span><span class="project-text"><small id="project-category">Allgemein</small><strong id="project-name">Roman</strong></span><span data-icon="chevrons-up-down"></span></button>
     <div id="project-options" class="popover" hidden>
-      <button data-project="new"><span data-icon="file-plus"></span> Neues Projekt</button><button data-project="open"><span data-icon="folder-open"></span> Projekt öffnen</button><button data-project="meta"><span data-icon="pencil"></span> Titel und Autor</button><button data-project="backup"><span data-icon="archive"></span> Projekt sichern</button>
+      <button data-project="new"><span data-icon="file-plus"></span> Neues Projekt</button><button data-project="open"><span data-icon="folder-open"></span> Projekt öffnen</button><button data-project="meta"><span data-icon="pencil"></span> Projektangaben</button><button data-project="backup"><span data-icon="archive"></span> Projekt sichern</button>
+      <div class="project-menu-divider"></div>
+      <button data-project="new-cloud"><span data-icon="file-plus"></span> Neues Cloud-Projekt</button>
+      <button data-project="open-cloud"><span data-icon="folder-open"></span> Cloud-Projekt öffnen</button>
+      <button data-project="copy-cloud"><span data-icon="archive"></span> Kopie in Cloud-Ordner</button>
     </div>
   </div>
   <nav class="main-nav">
     <button data-view="editor" class="nav-item active"><span data-icon="pen-line"></span> Schreiben</button>
+    <button data-view="storyboard" class="nav-item"><span data-icon="calendar-range"></span> Storyboard</button>
     <button data-view="material" class="nav-item"><span data-icon="folder-open"></span> Material</button>
     <button data-view="layout" class="nav-item"><span data-icon="book-open-check"></span> Buchsatz</button>
   </nav>
@@ -39,6 +44,11 @@
       <span class="saved"><span data-icon="check"></span><span id="save-status" role="status">Lokal gespeichert</span></span>
       <button id="theme" class="icon-button" aria-label="Farbschema wechseln" title="Farbschema wechseln"><span data-icon="moon"></span></button>
       <button id="export" class="primary"><span data-icon="upload"></span> Exportieren</button>
+      <div id="window-buttons" role="group" aria-label="Fenstersteuerung" hidden>
+        <button id="window-minimize" class="icon-button" data-icon="minus" data-window-action="minimize" aria-label="Fenster minimieren" title="Minimieren"></button>
+        <button id="window-maximize" class="icon-button" data-icon="square" data-window-action="toggle-maximize" aria-label="Fenster maximieren" title="Maximieren"></button>
+        <button id="window-close" class="icon-button" data-icon="x" data-window-action="close" aria-label="Fenster schließen" title="Schließen"></button>
+      </div>
     </div>
   </header>
 
@@ -87,6 +97,10 @@
         <div class="panel-subrow"><select id="dictionary-language" aria-label="Sprache für Wortschatz"></select><button id="use-selection" class="text-button">Markierung</button></div>
         <div id="synonyms" aria-live="polite"></div>
       </section>
+      <section class="panel speech-panel">
+        <div class="panel-title"><span class="panel-icon" data-icon="mic"></span><h2>Sprachwörterbuch</h2></div>
+        <div class="panel-subrow"><button id="speech-vocabulary" class="text-button">Einträge</button><button id="learn-speech" class="text-button">Markierung lernen</button></div>
+      </section>
       <section class="panel spelling-panel">
         <div class="panel-title"><span class="panel-icon" data-icon="spell-check"></span><h2>Rechtschreibung</h2></div>
         <div class="panel-subrow"><select id="spell-language" aria-label="Sprache der Rechtschreibprüfung"></select><button id="check-spelling" class="text-button">Prüfen</button></div>
@@ -94,6 +108,28 @@
       </section>
     </aside>
   </div>
+
+  <main id="storyboard-view" class="view page-view storyboard-view" hidden>
+    <div class="page-heading">
+      <div><h1>Storyboard</h1><p>Ordne Szenen als Zettel und verknüpfe sie mit deinen Kapiteln.</p></div>
+      <button id="add-story-note" class="primary"><span data-icon="plus"></span> Zettel hinzufügen</button>
+    </div>
+    <div class="storyboard-toolbar" aria-label="Storyboard-Ansicht">
+      <button type="button" data-board-mode="board" aria-pressed="true">Pinnwand</button>
+      <button type="button" data-board-mode="timeline" aria-pressed="false">Zeitleiste</button>
+      <label id="connection-color-label">Linienfarbe <select id="connection-color"><option value="green">Grün</option><option value="blue">Blau</option><option value="red">Rot</option><option value="gold">Gold</option></select></label>
+      <span id="board-instruction" role="status"></span>
+    </div>
+    <div id="storyboard-scroll" tabindex="0" aria-label="Pinnwand">
+      <div id="storyboard-canvas">
+        <svg id="board-connections" aria-hidden="true"></svg>
+        <aside class="board-rail" aria-label="Kapitel auf der Pinnwand"><h2>Kapitel</h2><div id="board-chapters"></div></aside>
+        <div id="board-notes"></div>
+        <div id="board-empty"><span class="panel-icon" data-icon="calendar-range"></span><p>Hier ist Platz für deine erste Szene.</p></div>
+      </div>
+    </div>
+    <div id="storyboard-timeline" aria-label="Zeitleiste" hidden></div>
+  </main>
 
   <main id="material-view" class="view page-view" hidden>
     <div class="page-heading"><div><h1>Material</h1><p>Recherche, Dateien und Transkripte für dein Projekt.</p></div><button id="add-url" class="secondary"><span data-icon="link"></span> Weblink hinzufügen</button></div>

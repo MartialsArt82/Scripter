@@ -2,3 +2,7 @@
 @font-face{font-family:"DM Sans";font-style:normal;font-weight:600;font-display:swap;src:url("dm-sans-latin-600-normal.woff2") format("woff2")}
 @font-face{font-family:"DM Sans";font-style:normal;font-weight:700;font-display:swap;src:url("dm-sans-latin-700-normal.woff2") format("woff2")}
 @font-face{font-family:"Lora";font-style:normal;font-weight:600;font-display:swap;src:url("lora-latin-600-normal.woff2") format("woff2")}
+@font-face{font-family:"Courier Prime";font-style:normal;font-weight:400;font-display:swap;src:url("CourierPrime-Regular.ttf") format("truetype")}
+@font-face{font-family:"Courier Prime";font-style:normal;font-weight:700;font-display:swap;src:url("CourierPrime-Bold.ttf") format("truetype")}
+@font-face{font-family:"Courier Prime";font-style:italic;font-weight:400;font-display:swap;src:url("CourierPrime-Italic.ttf") format("truetype")}
+@font-face{font-family:"Courier Prime";font-style:italic;font-weight:700;font-display:swap;src:url("CourierPrime-BoldItalic.ttf") format("truetype")}

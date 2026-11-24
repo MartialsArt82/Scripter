@@ -6,6 +6,8 @@ const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { randomUUID } = require('node:crypto');
+const { applySpeechRules, voiceHints } = require('./speech.cjs');
+const { normalizeAccess } = require('./appearance.js');
 const { productName, version } = require('./package.json');
 const { atomic, bookHtml, escape, locales, project, validProject } = require('./core.cjs');
 
@@ -14,6 +16,7 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'romansatz', privileges: { secure: true, standard: true, supportFetchAPI: true, corsEnabled: true } }
 ]);
 app.setName(productName);
+if (process.platform === 'linux') app.setDesktopName('de.scripter.Scripter.desktop');
 if (process.env.ROMAN_TEST_DIR) {
   app.setPath('userData', process.env.ROMAN_TEST_DIR);
 } else {
@@ -54,33 +57,97 @@ const formats = {
   txt: ['Nur Text', 'txt'], markdown: ['Markdown', 'md'], html: ['HTML', 'html'],
   latex: ['LaTeX', 'tex'], icml: ['InDesign InCopy', 'icml']
 };
-let main, folder, manifest, registry, state, thesaurus, whisperBusy = false;
+const cloudProviders = new Set(['google','onedrive','dropbox','icloud','other']);
+let main, folder, manifest, manifestContents, registry, locationFile, state, thesaurus, whisperBusy = false;
+let unavailableProject = '';
+let locations = normalizeLocations();
 
 function remember() {
   atomic(registry, JSON.stringify({ folder }));
 }
-function load(dir) {
+function load(dir, rememberProject = true) {
   const filename = path.join(dir, 'roman.json');
-  const next = validProject(JSON.parse(fs.readFileSync(filename, 'utf8')));
+  const raw = fs.readFileSync(filename, 'utf8');
+  const next = validProject(JSON.parse(raw));
   folder = dir;
   manifest = filename;
+  manifestContents = raw;
   state = next;
-  remember();
+  if (rememberProject) remember();
   return state;
 }
-function initialize(dir, title, demo) {
+function initialize(dir, title, demo, rememberProject = true, style) {
   fs.mkdirSync(path.join(dir, 'Material'), { recursive: true });
   const filename = path.join(dir, 'roman.json');
-  fs.writeFileSync(filename, JSON.stringify(project(title, demo), null, 2), { flag: 'wx' });
-  return load(dir);
+  fs.writeFileSync(filename, JSON.stringify(project(title, demo, style), null, 2), { flag: 'wx' });
+  return load(dir, rememberProject);
 }
 function persist() {
-  atomic(manifest, JSON.stringify(state, null, 2));
+  let current;
+  try { current = fs.readFileSync(manifest, 'utf8'); }
+  catch (error) {
+    if (error.code === 'ENOENT') throw new Error('Die Projektdatei ist nicht mehr erreichbar. Prüfe den Ordner oder sichere deinen Arbeitsstand als Kopie.');
+    throw error;
+  }
+  if (current !== manifestContents) throw new Error('Die Projektdatei wurde außerhalb dieses Fensters geändert. Sichere deinen Arbeitsstand als Kopie, bevor du die andere Fassung öffnest.');
+  const next = JSON.stringify(state, null, 2);
+  if (next === current) return;
+  atomic(manifest, next);
+  manifestContents = next;
 }
 function save(draft) {
   const validated = validProject(draft);
+  const previous = state;
   state = { ...validated, assets: state.assets };
-  persist();
+  try { persist(); } catch (error) { state = previous; throw error; }
+}
+function normalizeLocations(value) {
+  const knownPath = input => typeof input === 'string' && path.isAbsolute(input) && !input.includes('\0') ? path.normalize(input) : '';
+  return {
+    preferred: knownPath(value?.preferred),
+    provider: cloudProviders.has(value?.provider) ? value.provider : 'google',
+    access: normalizeAccess(value?.access),
+    clouds: Object.fromEntries([...cloudProviders].map(key => [key, knownPath(value?.clouds?.[key])]))
+  };
+}
+function folderContains(root, candidate) {
+  const relative = path.relative(root, candidate);
+  return relative === '' || (!path.isAbsolute(relative) && relative !== '..' && !relative.startsWith('..' + path.sep));
+}
+function cloudRoot() {
+  const chosen = locations.clouds[locations.provider];
+  if (!chosen) throw new Error('Richte zuerst in den Einstellungen einen Cloud-Ordner ein.');
+  try {
+    if (fs.statSync(chosen).isDirectory()) return fs.realpathSync(chosen);
+  } catch {}
+  throw new Error('Der Cloud-Ordner ist derzeit nicht erreichbar.');
+}
+function preferredRoot() {
+  try { if (locations.preferred && fs.statSync(locations.preferred).isDirectory()) return locations.preferred; }
+  catch {}
+  return app.getPath('documents');
+}
+function requireNewDestination(destination, root, copy = false) {
+  const resolved = path.join(fs.realpathSync(path.dirname(destination)), path.basename(destination));
+  if (root && !folderContains(root, resolved)) throw new Error('Wähle einen Ordner innerhalb deines Cloud-Ordners.');
+  let source = path.resolve(folder);
+  try { source = fs.realpathSync(folder); } catch {}
+  if (copy && folderContains(source, resolved)) throw new Error('Wähle einen neuen Ordner außerhalb des Projektordners.');
+  if (fs.existsSync(resolved)) throw new Error('Wähle einen neuen Ordnernamen.');
+  return resolved;
+}
+async function writeProjectCopy(destination, draft) {
+  const snapshot = { ...validProject(draft), assets: state.assets };
+  const temp = destination + '.partial-' + randomUUID();
+  try {
+    await fsp.mkdir(temp);
+    await fsp.writeFile(path.join(temp, 'roman.json'), JSON.stringify(snapshot, null, 2));
+    const media = path.join(folder, 'Material');
+    if (fs.existsSync(media)) await fsp.cp(media, path.join(temp, 'Material'), { recursive: true });
+    await fsp.rename(temp, destination);
+  } finally {
+    await fsp.rm(temp, { recursive: true, force: true });
+  }
 }
 function asset(id) {
   const result = state.assets.find(entry => entry.id === id);
@@ -126,6 +193,16 @@ async function executable(name, candidates) {
 const pandoc = () => executable('Pandoc', [process.env.ROMAN_PANDOC, path.join(process.resourcesPath, process.platform === 'win32' ? 'pandoc.exe' : 'pandoc'), 'pandoc', '/opt/homebrew/bin/pandoc', '/usr/local/bin/pandoc', path.join(process.env.LOCALAPPDATA || os.homedir(), 'Pandoc', 'pandoc.exe'), 'C:\\Program Files\\Pandoc\\pandoc.exe'].filter(Boolean));
 const office = () => executable('LibreOffice', ['soffice', '/Applications/LibreOffice.app/Contents/MacOS/soffice', 'C:\\Program Files\\LibreOffice\\program\\soffice.com', 'C:\\Program Files (x86)\\LibreOffice\\program\\soffice.com']);
 const tempDir = () => fsp.mkdtemp(path.join(app.getPath('temp'), 'scripter-'));
+const isLinux = process.platform === 'linux';
+function describeWindow(win) {
+  return { linuxControls: isLinux, maximized: win.isMaximized() };
+}
+function registerWindowState(win) {
+  if (!isLinux) return;
+  for (const event of ['maximize','unmaximize','restore']) {
+    win.on(event, () => { if (!win.isDestroyed()) win.webContents.send('window-state', describeWindow(win)); });
+  }
+}
 const isMac = process.platform === 'darwin';
 const isWin = process.platform === 'win32';
 const voiceDir = () => path.join(app.getPath('userData'), 'sprache');
@@ -180,10 +257,13 @@ async function transcript(source, lang) {
     }
     const script = path.join(temp, 'transcribe.py');
     await fsp.copyFile(path.join(__dirname, 'transcribe.py'), script);
-    const output = await run(voicePython(), [script, input, lang, path.join(voiceDir(), 'modell')], {
+    const rules = state.speechRules;
+    const hintFile = path.join(temp, 'vokabular.txt');
+    await fsp.writeFile(hintFile, voiceHints(rules, lang), 'utf8');
+    const output = await run(voicePython(), [script, input, lang, path.join(voiceDir(), 'modell'), hintFile], {
       env: { ...process.env, HF_HUB_OFFLINE: '1', HF_HOME: path.join(voiceDir(), 'cache') }
     });
-    return JSON.parse(output);
+    return applySpeechRules(JSON.parse(output), rules);
   } finally {
     whisperBusy = false;
     if (temp) await fsp.rm(temp, { recursive: true, force: true });
@@ -241,10 +321,11 @@ async function printPdf(html) {
 async function publish(format, manuscript) {
   if (format === 'preview') {
     const bytes = await printPdf(bookHtml(manuscript, manuscript.chapters, manuscript.settings, true));
-    const preview = new BrowserWindow({ parent: main, width: 860, height: 900, title: 'Satzvorschau', autoHideMenuBar: true,
+    const preview = new BrowserWindow({ parent: main, width: 1160, height: 840, minWidth: 540, frame: !isLinux, title: 'Satzvorschau', autoHideMenuBar: true,
       webPreferences: { preload: path.join(__dirname, 'preview-preload.cjs'), contextIsolation: true, sandbox: true } });
     const id = preview.webContents.id;
-    previewDocuments.set(id, { bytes, theme: manuscript.settings.theme });
+    previewDocuments.set(id, { bytes, theme: manuscript.settings.theme, access: locations.access, window: describeWindow(preview) });
+    registerWindowState(preview);
     preview.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     preview.webContents.on('will-navigate', event => event.preventDefault());
     preview.on('closed', () => previewDocuments.delete(id));
@@ -289,15 +370,21 @@ async function publish(format, manuscript) {
 app.on('second-instance', () => { if (main) { if (main.isMinimized()) main.restore(); main.focus(); } });
 app.whenReady().then(() => {
   registry = path.join(app.getPath('userData'), 'zuletzt.json');
+  locationFile = path.join(app.getPath('userData'), 'speicherorte.json');
+  try { locations = normalizeLocations(JSON.parse(fs.readFileSync(locationFile, 'utf8'))); } catch {}
   fs.mkdirSync(app.getPath('userData'), { recursive: true });
+  let recent;
   try {
-    load(JSON.parse(fs.readFileSync(registry, 'utf8')).folder);
+    recent = JSON.parse(fs.readFileSync(registry, 'utf8')).folder;
+    load(recent);
   } catch {
     const dir = path.join(app.getPath('userData'), 'Beispielprojekt');
-    if (fs.existsSync(path.join(dir, 'roman.json'))) load(dir);
-    else initialize(dir, 'Der letzte Sommer', true);
+    if (typeof recent === 'string' && recent !== dir) unavailableProject = recent;
+    if (fs.existsSync(path.join(dir, 'roman.json'))) load(dir, !unavailableProject);
+    else initialize(dir, 'Der letzte Sommer', true, !unavailableProject);
   }
-  main = new BrowserWindow({ width: 1540, height: 960, minWidth: 750, minHeight: 620, backgroundColor: '#f6f5ef', title: productName + ' ' + version, autoHideMenuBar: true, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, spellcheck: true } });
+  main = new BrowserWindow({ width: 1540, height: 960, minWidth: 750, minHeight: 620, frame: !isLinux, backgroundColor: '#f6f5ef', title: productName + ' ' + version, autoHideMenuBar: true, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, spellcheck: true } });
+  registerWindowState(main);
   main.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   main.webContents.on('will-navigate', event => event.preventDefault());
   session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => callback(contents === main.webContents && permission === 'media' && details.mediaTypes?.includes('audio') && !details.mediaTypes?.includes('video')));
@@ -322,6 +409,17 @@ app.whenReady().then(() => {
     const mime = file.endsWith('.html') ? 'text/html' : file.endsWith('.css') ? 'text/css' : 'text/javascript';
     return new Response(await fsp.readFile(path.join(__dirname, 'pdf-preview', file)), { headers: { 'Content-Type': mime + '; charset=utf-8' } });
   });
+  ipcMain.handle('window-control', (event, action) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!isLinux || !win || event.senderFrame?.parent || (win !== main && !previewDocuments.has(event.sender.id))) throw new Error('Fenstersteuerung nicht verfügbar.');
+    if (action === 'minimize') win.minimize();
+    else if (action === 'toggle-maximize') {
+      if (win.isMaximized()) win.unmaximize();
+      else win.maximize();
+    } else if (action === 'close') setImmediate(() => { if (!win.isDestroyed()) win.close(); });
+    else if (action !== 'get') throw new Error('Unbekannte Fensteraktion.');
+    return describeWindow(win);
+  });
   ipcMain.handle('preview-pdf', event => {
     if (event.senderFrame?.parent || !previewDocuments.has(event.sender.id)) throw new Error('Satzvorschau ist nicht verfügbar.');
     return previewDocuments.get(event.sender.id);
@@ -338,41 +436,51 @@ app.whenReady().then(() => {
     return action(...args);
   });
   handle('get', () => state);
-  handle('identity', () => ({ name: productName, version }));
+  handle('unavailable-project', () => unavailableProject);
+  handle('identity', () => ({ name: productName, version, window: describeWindow(main) }));
   handle('save', save);
   ipcMain.on('flush', (event, draft) => {
     if (event.sender !== main.webContents) return;
     try { save(draft); event.returnValue = true; }
-    catch { event.returnValue = false; }
+    catch (error) { event.returnValue = error.message; }
   });
-  handle('new', async () => {
-    const choice = await dialog.showSaveDialog(main, { title: 'Projektordner anlegen', defaultPath: path.join(app.getPath('documents'), 'Mein Roman') });
+  handle('locations', () => locations);
+  handle('save-locations', input => {
+    const next = normalizeLocations(input);
+    atomic(locationFile, JSON.stringify(next, null, 2));
+    locations = next;
+    return next;
+  });
+  handle('choose-folder', async selected => {
+    const choice = await dialog.showOpenDialog(main, { title: 'Ordner auswählen', defaultPath: typeof selected === 'string' && path.isAbsolute(selected) ? selected : preferredRoot(), properties: ['openDirectory','createDirectory'] });
+    return choice.canceled ? null : choice.filePaths[0];
+  });
+  handle('new', async (cloud, details) => {
+    const root = cloud ? cloudRoot() : null;
+    const title = typeof details?.title === 'string' ? details.title.trim().slice(0, 180) : '';
+    const suggestedFolder = title ? fileStem(title) : 'Mein Roman';
+    const choice = await dialog.showSaveDialog(main, { title: 'Projektordner anlegen', defaultPath: path.join(root ?? preferredRoot(), suggestedFolder) });
     if (choice.canceled) return null;
-    if (fs.existsSync(choice.filePath)) throw new Error('Wähle einen neuen Ordnernamen.');
-    return initialize(choice.filePath, path.basename(choice.filePath), false);
+    const destination = requireNewDestination(choice.filePath, root);
+    return initialize(destination, title || path.basename(destination), false, true, details);
   });
-  handle('open', async () => {
-    const choice = await dialog.showOpenDialog(main, { title: 'roman.json aus einem Projekt öffnen', properties: ['openFile'], filters: [{ name: 'Scripter-Projekt', extensions: ['json'] }] });
+  handle('open', async cloud => {
+    const root = cloud ? cloudRoot() : null;
+    const choice = await dialog.showOpenDialog(main, { title: 'roman.json aus einem Projekt öffnen', defaultPath: root ?? preferredRoot(), properties: ['openFile'], filters: [{ name: 'Scripter-Projekt', extensions: ['json'] }] });
     if (choice.canceled) return null;
     if (path.basename(choice.filePaths[0]) !== 'roman.json') throw new Error('Wähle die Datei „roman.json“ im Projektordner.');
-    return load(path.dirname(choice.filePaths[0]));
+    const dir = fs.realpathSync(path.dirname(choice.filePaths[0]));
+    if (root && !folderContains(root, dir)) throw new Error('Wähle ein Projekt innerhalb deines Cloud-Ordners.');
+    return load(dir);
   });
-  handle('backup', async () => {
-    const choice = await dialog.showSaveDialog(main, { title: 'Sicherung in neuem Ordner speichern', defaultPath: path.join(app.getPath('documents'), fileStem(state.title) + ' – Sicherung') });
-    if (choice.canceled) return false;
-    const destination = path.resolve(choice.filePath);
-    if (fs.existsSync(destination) || destination.startsWith(path.resolve(folder) + path.sep)) throw new Error('Wähle einen neuen Ordner außerhalb des Projektordners.');
-    const temp = destination + '.partial-' + randomUUID();
-    try {
-      await fsp.mkdir(temp);
-      await fsp.copyFile(manifest, path.join(temp, 'roman.json'));
-      const media = path.join(folder, 'Material');
-      if (fs.existsSync(media)) await fsp.cp(media, path.join(temp, 'Material'), { recursive: true });
-      await fsp.rename(temp, destination);
-      return true;
-    } finally {
-      await fsp.rm(temp, { recursive: true, force: true });
-    }
+  handle('backup', async (draft, cloud) => {
+    const root = cloud ? cloudRoot() : null;
+    const name = fileStem(draft.title) + (cloud ? '' : ' – Sicherung');
+    const choice = await dialog.showSaveDialog(main, { title: cloud ? 'Projekt als Cloud-Kopie speichern' : 'Sicherung in neuem Ordner speichern', defaultPath: path.join(root ?? preferredRoot(), name) });
+    if (choice.canceled) return null;
+    const destination = requireNewDestination(choice.filePath, root, true);
+    await writeProjectCopy(destination, draft);
+    return true;
   });
   handle('pick', async () => {
     const result = await dialog.showOpenDialog(main, { title: 'Material hinzufügen', properties: ['openFile','multiSelections'] });
@@ -403,7 +511,7 @@ app.whenReady().then(() => {
     const url = webAddress(value);
     if (!state.assets.some(item => item.url === url)) {
       state.assets.push({ id: randomUUID(), name: new URL(url).hostname, url, kind: 'web' });
-      persist();
+      try { persist(); } catch (error) { state.assets.pop(); throw error; }
     }
     return state.assets;
   });
@@ -417,8 +525,9 @@ app.whenReady().then(() => {
   handle('insert-asset', insertable);
   handle('remove-asset', id => {
     const item = asset(id);
-    state.assets = state.assets.filter(entry => entry.id !== id);
-    try { persist(); } catch (error) { state.assets.push(item); throw error; }
+    const previous = state.assets;
+    state.assets = previous.filter(entry => entry.id !== id);
+    try { persist(); } catch (error) { state.assets = previous; throw error; }
     if (item.file) fs.rmSync(assetPath(item), { force: true });
     return state.assets;
   });
@@ -444,6 +553,7 @@ app.whenReady().then(() => {
     return (await checkerFor(lang)).suggest(word).slice(0, 12);
   });
   handle('copy', text => clipboard.writeText(String(text)));
+  handle('open-kofi', () => shell.openExternal('https://ko-fi.com/paulweigl/tip'));
   handle('save-transcript', (id, result) => {
     const item = asset(id);
     const previous = item.transcript;
@@ -451,8 +561,9 @@ app.whenReady().then(() => {
     try { persist(); } catch (error) { item.transcript = previous; throw error; }
     return state.assets;
   });
-  handle('zoom', value => main.webContents.setZoomFactor(Math.max(.75, Math.min(1.5, Number(value) / 100 || 1))));
+  handle('zoom', value => main.webContents.setZoomFactor(Math.max(.75, Math.min(2, Number(value) / 100 || 1))));
   handle('setup', setupWhisper);
+  handle('refresh-transcript', value => applySpeechRules(value, state.speechRules));
   handle('transcribe', transcript);
   handle('publish', publish);
   handle('help', async () => {

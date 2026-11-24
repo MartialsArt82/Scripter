@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Scripter
+GenericName=Schreibwerkstatt für Romane
+Comment=Manuskripte schreiben, Kapitel planen und Szenen verbinden
+Exec=/opt/scripter/Scripter
+Icon=de.scripter.Scripter
+Terminal=false
+Categories=Office;WordProcessor;
+StartupNotify=true
+StartupWMClass=Scripter

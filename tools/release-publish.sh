@@ -11,7 +11,10 @@ if [[ $(gh api "repos/$repo" --jq '.private') != true ]]; then
   echo 'Die Freigabe gilt für ein privates Repository.' >&2
   exit 1
 fi
-release_url=$(gh release view "$tag" --repo "$repo" --json apiUrl --jq .apiUrl)
+if ! release_url=$(gh release view "$tag" --repo "$repo" --json apiUrl --jq .apiUrl); then
+  gh release create "$tag" --repo "$repo" --target "$commit" --title "Scripter $version" --notes-file "packaging/release-notes.md" --draft
+  release_url=$(gh release view "$tag" --repo "$repo" --json apiUrl --jq .apiUrl)
+fi
 release_id=${release_url##*/}
 [[ "$release_id" =~ ^[0-9]+$ ]]
 if [[ $(gh api "repos/$repo/releases/$release_id" --jq '.draft') != true ]]; then
@@ -21,11 +24,11 @@ fi
 
 cd "$output"
 sha256sum --check SHA256SUMS.txt
-gh release upload "$tag" --repo "$repo" --clobber "Scripter-$version-"*.zip "Scripter-$version-Fedora-Nobara-x64.tar.gz" STARTEN.txt SHA256SUMS.txt
+gh release upload "$tag" --repo "$repo" --clobber "Scripter-$version-"*.zip "Scripter-$version-Fedora-Nobara-x64.tar.gz" "scripter-$version-1.x86_64.rpm" STARTEN.txt SHA256SUMS.txt
 
 local_assets=$(mktemp)
 trap 'rm -f -- "$local_assets"' EXIT
-sha256sum "Scripter-$version-"*.zip "Scripter-$version-Fedora-Nobara-x64.tar.gz" STARTEN.txt SHA256SUMS.txt | sort > "$local_assets"
+sha256sum "Scripter-$version-"*.zip "Scripter-$version-Fedora-Nobara-x64.tar.gz" "scripter-$version-1.x86_64.rpm" STARTEN.txt SHA256SUMS.txt | sort > "$local_assets"
 remote_assets=$(gh api "repos/$repo/releases/$release_id/assets" --paginate --jq '.[] | select(.state == "uploaded") | "\(.digest | sub("^sha256:"; ""))  \(.name)"' | sort)
 diff -u "$local_assets" <(printf '%s\n' "$remote_assets")
 

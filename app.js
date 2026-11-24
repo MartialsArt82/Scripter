@@ -7,7 +7,7 @@ const modal = $('#modal');
 const langs = { de: 'Deutsch', en: 'Englisch', es: 'Spanisch', pt: 'Portugiesisch', fr: 'Französisch' };
 const types = { text: 'Textdatei', image: 'Bild', pdf: 'PDF', audio: 'Audio', video: 'Video', web: 'Webseite', file: 'Datei' };
 const icons = { text: 'file-text', image: 'image', pdf: 'file-text', audio: 'headphones', video: 'video', web: 'globe', file: 'file' };
-const fonts = ['Georgia', 'Palatino', 'Times New Roman', 'Garamond', 'Arial', 'Verdana'];
+let readingAccess = appearance.normalizeAccess();
 const exportsList = { pdf: 'PDF · Buchsatz', docx: 'DOCX · Word', doc: 'DOC · Word 97–2003', odt: 'ODT · OpenDocument', epub: 'EPUB 3 · E-Book', rtf: 'RTF · Rich Text', txt: 'TXT · Reintext', markdown: 'Markdown', html: 'HTML', latex: 'LaTeX', icml: 'ICML · Adobe InCopy' };
 const trueWords = /[\p{L}\p{N}]+(?:[’'\-][\p{L}\p{N}]+)*/gu;
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -33,11 +33,10 @@ let dirty = false;
 function decorate(root = document) {
   for (const node of root.querySelectorAll('[data-icon]')) {
     if (node.firstElementChild) continue;
-    const image = document.createElement('img');
-    image.src = 'icons/' + node.dataset.icon + '.svg';
+    const image = document.createElement('span');
+    image.style.setProperty('--icon-image', `url("icons/${node.dataset.icon}.svg")`);
     image.className = 'svg-icon';
-    image.alt = '';
-    image.draggable = false;
+    image.setAttribute('aria-hidden', 'true');
     node.append(image);
   }
 }
@@ -61,10 +60,11 @@ function queueSave() {
 function flush() {
   clearTimeout(saveTimer);
   if (!dirty || !state) return true;
-  const saved = window.desk.flush(state);
+  const result = window.desk.flush(state);
+  const saved = result === true;
   dirty = !saved;
   $('#save-status').textContent = saved ? 'Lokal gespeichert' : 'Speichern fehlgeschlagen';
-  if (!saved) toast('Das Projekt konnte nicht gespeichert werden. Prüfe den verfügbaren Speicherplatz und die Schreibrechte des Projektordners.', true);
+  if (!saved) toast(typeof result === 'string' ? result : 'Das Projekt konnte nicht gespeichert werden.', true);
   return saved;
 }
 function refreshMetrics() {
@@ -91,6 +91,13 @@ function edited() {
 }
 function renderProject() {
   $('#project-name').textContent = state.title;
+  const category = appearance.categories[state.category] ?? appearance.categories.general;
+  $('#project-category').textContent = category.label;
+  const symbol = $('#project-menu .project-symbol');
+  symbol.dataset.icon = category.icon;
+  symbol.replaceChildren();
+  decorate($('#project-menu'));
+  applyAppearance(state.accent, state.settings.theme, readingAccess);
   $('#crumb-project').textContent = state.title;
   $('#book-cover h2').textContent = state.title;
   $('#book-cover p').textContent = state.author;
@@ -116,16 +123,17 @@ function renderChapter() {
 }
 function renderPreferences() {
   const settings = state.settings;
-  document.documentElement.dataset.theme = settings.theme;
-  document.documentElement.style.setProperty('--manuscript-font', '"' + (fonts.includes(settings.font) ? settings.font : 'Georgia') + '"');
+  applyAppearance(state.accent, settings.theme, readingAccess);
+  document.documentElement.style.setProperty('--manuscript-font', appearance.fontStack(settings.font));
   editor.lang = settings.lang;
   $('#spell-language').value = settings.lang;
   $('#dictionary-language').value = settings.lang;
   $('#theme').replaceChildren();
   $('#theme').dataset.icon = settings.theme === 'dark' ? 'sun' : 'moon';
   decorate();
-  $('#status-zoom').textContent = settings.zoom + ' %';
-  window.desk.zoom(settings.zoom).catch(errorToast);
+  const zoom = readingAccess.zoom ?? settings.zoom;
+  $('#status-zoom').textContent = zoom + ' %';
+  window.desk.zoom(zoom).catch(errorToast);
   window.desk.spell([], settings.lang).catch(errorToast);
 }
 function paragraphs(text) {
@@ -196,6 +204,7 @@ function startProject(next) {
   showView('editor');
 }
 function showView(name) {
+  if (view === 'storyboard' && name !== 'storyboard') cancelLink();
   view = name;
   if (name !== 'editor') document.body.classList.remove('focus');
   for (const button of $$('[data-view]')) {
@@ -203,12 +212,14 @@ function showView(name) {
     if (button.dataset.view === name) button.setAttribute('aria-current', 'page');
     else button.removeAttribute('aria-current');
   }
-  for (const key of ['editor','material','layout']) $('#' + key + '-view').hidden = key !== name;
-  $('#crumb-view').textContent = { editor: 'Schreiben', material: 'Material', layout: 'Buchsatz' }[name];
+  for (const key of ['editor','storyboard','material','layout']) $('#' + key + '-view').hidden = key !== name;
+  $('#crumb-view').textContent = { editor: 'Schreiben', storyboard: 'Storyboard', material: 'Material', layout: 'Buchsatz' }[name];
+  if (name === 'storyboard') renderStoryboard();
   refreshMetrics();
 }
 function openModal(title, content, action, verb = 'Speichern') {
   $('#modal-title').textContent = title;
+  $('#modal-content').onclick = null;
   $('#modal-content').innerHTML = content;
   $('#confirm-modal').textContent = verb;
   $('#confirm-modal').hidden = !action;
@@ -264,6 +275,7 @@ function chapterOptions(id) {
   $('#delete-chapter').onclick = () => {
     openModal('Kapitel löschen?', `<p>„${esc(item.title)}“ und sein Manuskripttext werden aus dem Projekt entfernt.</p>`, () => {
       state.chapters.splice(index, 1);
+      for (const note of state.storyboard) note.chapters = note.chapters.filter(chapterId => chapterId !== id);
       counts.delete(id);
       if (state.active === id) { state.active = state.chapters[Math.min(index, state.chapters.length - 1)].id; renderChapter(); }
       else {
@@ -275,20 +287,77 @@ function chapterOptions(id) {
     }, 'Löschen');
   };
 }
-function settingsDialog() {
+const cloudProviders = { google: 'Google Drive', onedrive: 'OneDrive', dropbox: 'Dropbox', icloud: 'iCloud Drive', other: 'Anderer Anbieter' };
+async function settingsDialog() {
   const settings = state.settings;
+  const locations = await window.desk.locations();
+  const access = appearance.normalizeAccess(locations.access);
+  const locationField = (label, name) => `<div class="modal-field"><span>${label}</span><div class="location-field">
+    <input id="${name}-path" aria-label="${label}" readonly>
+    <button type="button" id="${name}-choose" class="secondary">Auswählen</button>
+    <button type="button" id="${name}-clear" class="text-button">Entfernen</button>
+  </div></div>`;
   openModal('Einstellungen', [
     field('Darstellung', `<select name="theme">${option('light','Hell',settings.theme)}${option('dark','Dunkel',settings.theme)}</select>`),
-    field('Schrift für Manuskript und Buchsatz', `<select name="font">${fonts.map(font => option(font,font,settings.font)).join('')}</select>`),
-    field('Bildschirmskalierung', `<select name="zoom">${[75,85,95,100,110,125,150].map(zoom => option(zoom,zoom + ' %',settings.zoom)).join('')}</select>`),
+    fontPreview(settings.font),
+    field('Bildschirmskalierung', `<select name="zoom">${appearance.zoomLevels.map(zoom => option(zoom,zoom + ' %',access.zoom ?? settings.zoom)).join('')}</select>`),
+    `<div class="settings-support"><button type="button" id="kofi-support" aria-label="Scripter auf Ko-fi unterstützen (öffnet den Browser)">
+      <img src="assets/kofi-${settings.theme === 'dark' ? 'beige' : 'dark'}.avif" width="980" height="198" alt="">
+    </button></div>`,
+    accessibilityFields(access),
     field('Transkriptsprache', `<select name="speech">${Object.entries({auto:'Automatisch',de:'Deutsch',en:'Englisch'}).map(([lang,label]) => option(lang,label,settings.speech)).join('')}</select>`),
+    '<h3>Speicherorte</h3>',
+    locationField('Wunschort für neue lokale Projekte', 'preferred'),
+    '<h3>Cloud-Synchronisation</h3>',
+    field('Anbieter', `<select id="cloud-provider">${Object.entries(cloudProviders).map(([key,label]) => option(key,label,locations.provider)).join('')}</select>`),
+    locationField('Synchronisierter Ordner', 'cloud'),
+    '<p>Wähle einen lokal eingebundenen Ordner deines Anbieters. Sein Sync-Programm gleicht die Dateien ab. Im Projektmenü kannst du Cloud-Projekte anlegen, öffnen oder eine Kopie dorthin speichern.</p>',
     '<p>Für Diktat und Transkripte brauchst du Python 3.12. Bei der Einrichtung wird das mehrsprachige Whisper-Modell heruntergeladen. Die Erkennung läuft danach lokal.</p><button id="speech-setup" type="button" class="secondary">Spracherkennung einrichten</button><p id="setup-status" role="status"></p>'
-  ].join(''), data => {
+  ].join(''), async data => {
+    locations.access = appearance.normalizeAccess({
+      zoom: Number(data.get('zoom')), textSize: Number(data.get('textSize')), lineHeight: Number(data.get('lineHeight')),
+      highContrast: data.has('highContrast'), strongFocus: data.has('strongFocus'), reduceMotion: data.has('reduceMotion')
+    });
+    readingAccess = (await window.desk.saveLocations(locations)).access;
     for (const name of ['theme','font','speech']) settings[name] = data.get(name);
-    settings.zoom = Number(data.get('zoom'));
+    settings.zoom = readingAccess.zoom;
     renderPreferences();
+    renderLayout();
     queueSave();
   });
+  $('#kofi-support').onclick = () => window.desk.openKofi().catch(errorToast);
+  $('#font-picker').onchange = event => {
+    if (event.target.name !== 'font') return;
+    const name = event.target.value;
+    $('#selected-font').textContent = name;
+    $('#selected-font').style.fontFamily = appearance.fontStack(name);
+  };
+  const refreshLocations = () => {
+    $('#preferred-path').value = locations.preferred;
+    $('#preferred-path').placeholder = 'Standardordner (Dokumente)';
+    $('#preferred-clear').disabled = !locations.preferred;
+    $('#cloud-path').value = locations.clouds[locations.provider] || '';
+    $('#cloud-path').placeholder = 'Ordner auswählen';
+    $('#cloud-clear').disabled = !locations.clouds[locations.provider];
+  };
+  $('#cloud-provider').onchange = event => { locations.provider = event.target.value; refreshLocations(); };
+  for (const mode of ['preferred','cloud']) {
+    const assign = (provider, value) => {
+      if (mode === 'preferred') locations.preferred = value;
+      else locations.clouds[provider] = value;
+      if ($('#' + mode + '-path')) refreshLocations();
+    };
+    $('#' + mode + '-choose').onclick = async () => {
+      const current = $('#' + mode + '-path');
+      const provider = locations.provider;
+      try {
+        const chosen = await window.desk.chooseFolder(current.value);
+        if (chosen && current.isConnected) assign(provider, chosen);
+      } catch (error) { errorToast(error); }
+    };
+    $('#' + mode + '-clear').onclick = () => assign(locations.provider, '');
+  }
+  refreshLocations();
   $('#speech-setup').onclick = async event => {
     const button = event.currentTarget;
     button.disabled = true;
@@ -342,14 +411,36 @@ function formatTime(seconds) {
   const time = Math.floor(seconds);
   return String(Math.floor(time / 60)).padStart(2,'0') + ':' + String(time % 60).padStart(2,'0');
 }
-function showTranscript(result, name, target) {
-  const value = result.segments.map(segment => segment.text).join('\n');
+function showTranscript(result, name, target, assetId) {
   const timed = result.segments.map(segment => '[' + formatTime(segment.start) + '] ' + segment.text).join('\n');
+  const corrected = result.segments.some(segment => segment.originalText != null);
+  const original = corrected ? result.segments.map(segment => segment.originalText ?? segment.text).join('\n') : '';
+  const value = result.segments.map(segment => segment.text).join('\n');
   if (!value) { toast('Es wurde keine Sprache erkannt.'); return; }
-  openModal(name, `<p>${esc(langs[result.language] || result.language)} · ${number(result.segments.length)} Abschnitte</p><textarea rows="10" aria-label="Transkript" readonly>${esc(timed)}</textarea>`, () => {
+  openModal(name, `<p>${esc(langs[result.language] || result.language)} · ${number(result.segments.length)} Abschnitte</p>
+    <textarea id="transcript-text" rows="10" aria-label="Transkript" readonly>${esc(timed)}</textarea>
+    ${corrected ? `<details class="speech-original"><summary>Ursprüngliche Erkennung anzeigen</summary><textarea id="transcript-original" rows="5" aria-label="Ursprüngliche Erkennung" readonly>${esc(original)}</textarea></details>` : ''}
+    <button type="button" id="learn-transcript" class="secondary">Markierung lernen</button>`, () => {
     modal.close();
     insertContent(paragraphs(value), target);
   }, 'Ins Kapitel');
+  $('#learn-transcript').onclick = () => {
+    const selected = [...$('#modal-content').querySelectorAll('textarea')].find(textarea =>
+      textarea.selectionEnd > textarea.selectionStart);
+    const marked = selected?.value.slice(selected.selectionStart, selected.selectionEnd).trim();
+    if (!marked) return toast('Markiere zuerst das Wort oder die Wendung im Transkript.');
+    if (marked.length > 160 || /\[\d+:\d+\]/.test(marked)) return toast('Markiere höchstens 160 Zeichen ohne Zeitstempel.');
+    editSpeechRule({
+      marked,
+      language: ['de','en'].includes(result.language) ? result.language : 'any',
+      onSaved: async () => {
+        if (!flush()) throw new Error('Das Sprachwörterbuch konnte nicht gespeichert werden.');
+        const updated = await window.desk.refreshTranscript(result);
+        state.assets = await window.desk.saveTranscript(assetId, updated);
+        showTranscript(updated, name, target, assetId);
+      }
+    });
+  };
 }
 function renderLayout() {
   const settings = state.settings;
@@ -358,7 +449,7 @@ function renderLayout() {
   form.elements.pageNumbers.checked = settings.pageNumbers;
   const ratios = { trade: '.628', pocket: '.632', a5: '.705', a4: '.707', us: '.667' };
   $('#book-cover').style.setProperty('--ratio', ratios[settings.trim] || '.628');
-  $('#book-cover').style.fontFamily = fonts.includes(settings.font) ? settings.font : 'Georgia';
+  $('#book-cover').style.fontFamily = appearance.fontStack(settings.font);
   $('#book-cover h2').style.fontFamily = 'inherit';
 }
 function manuscript(scope = 'book') {
@@ -401,6 +492,7 @@ async function dictate() {
       toast('Das Diktat wird transkribiert …');
       try {
         const bytes = await new Blob(chunks, { type: recorder.mimeType }).arrayBuffer();
+        if (!flush()) return;
         const result = await window.desk.transcribe({ bytes }, state.settings.speech);
         const content = result.segments.map(segment => segment.text).join(' ');
         if (content) { insertContent(paragraphs(content), target); toast('Diktat eingefügt.'); }
@@ -430,7 +522,7 @@ $('#close-modal').onclick = $('#cancel-modal').onclick = () => { if (!$('#confir
 modal.addEventListener('cancel', event => { if ($('#confirm-modal').disabled) event.preventDefault(); });
 for (const button of $$('[data-view]')) button.onclick = () => showView(button.dataset.view);
 $('#new-chapter').onclick = $('#add-chapter').onclick = newChapter;
-$('#settings').onclick = $('#status-zoom').onclick = settingsDialog;
+$('#settings').onclick = $('#status-zoom').onclick = () => settingsDialog().catch(errorToast);
 $('#theme').onclick = () => {
   state.settings.theme = state.settings.theme === 'dark' ? 'light' : 'dark';
   renderPreferences();
@@ -445,13 +537,17 @@ $('#chapter-list').addEventListener('click', event => {
   const button = event.target.closest('button[data-id]');
   if (!button) return;
   if (button.classList.contains('chapter-options')) return chapterOptions(button.dataset.id);
-  if (state.active !== button.dataset.id) {
-    state.active = button.dataset.id;
+  openChapter(button.dataset.id);
+});
+function openChapter(id) {
+  if (!state.chapters.some(item => item.id === id)) return;
+  if (state.active !== id) {
+    state.active = id;
     renderChapter();
     queueSave();
   }
   showView('editor');
-});
+}
 $('#project-menu').onclick = () => {
   const menu = $('#project-options');
   menu.hidden = !menu.hidden;
@@ -466,29 +562,57 @@ document.addEventListener('click', event => {
 for (const button of $$('[data-project]')) button.onclick = async () => {
   const action = button.dataset.project;
   if (action === 'meta') {
-    openModal('Projektangaben', field('Romantitel', `<input name="title" value="${esc(state.title)}" maxlength="180" required>`) + field('Autorin oder Autor', `<input name="author" value="${esc(state.author)}" maxlength="180">`), data => {
+    openModal('Projektangaben', field('Romantitel', `<input name="title" value="${esc(state.title)}" maxlength="180" required>`) + field('Autorin oder Autor', `<input name="author" value="${esc(state.author)}" maxlength="180">`) + projectFields(state), data => {
       const title = String(data.get('title')).trim();
       if (!title) throw new Error('Bitte gib einen Romantitel ein.');
       state.title = title;
       state.author = String(data.get('author')).trim();
+      Object.assign(state, appearance.normalizeProjectStyle(Object.fromEntries(data)));
       renderProject();
       queueSave();
     });
+    bindProjectFields();
     return;
   }
+  if (action === 'new' || action === 'new-cloud') {
+    openModal(action === 'new-cloud' ? 'Neues Cloud-Projekt' : 'Neues Projekt',
+      field('Projekttitel', '<input name="title" maxlength="180" placeholder="Mein Roman" autofocus>') + projectFields(),
+      async data => {
+        const details = Object.fromEntries(data);
+        modal.close();
+        await runProjectAction(action, false, details);
+        return false;
+      }, 'Speicherort wählen');
+    bindProjectFields();
+    return;
+  }
+  await runProjectAction(action);
+};
+async function runProjectAction(action, discard = false, details) {
   if (projectDialogBusy || imports || recording || transcribing) return toast('Beende zuerst die laufende Projektaktion.');
-  if (!flush()) return;
+  const copy = ['backup', 'copy-cloud'].includes(action);
+  if (!copy && !discard && !flush()) {
+    openModal('Projekt wechseln?', '<p>Der aktuelle Arbeitsstand konnte nicht gespeichert werden. Sichere ihn im Projektmenü als Kopie, wenn du ihn behalten willst.</p>', async () => {
+      modal.close();
+      await runProjectAction(action, true, details);
+      return false;
+    }, 'Trotzdem wechseln');
+    return;
+  }
   projectDialogBusy = true;
   try {
-    if (action === 'backup') {
-      if (await window.desk.backup()) toast('Projektsicherung gespeichert.');
+    if (copy) {
+      if (await window.desk.backup(state, action === 'copy-cloud')) {
+        toast(action === 'copy-cloud' ? 'Cloud-Kopie gespeichert. Öffne sie über „Cloud-Projekt öffnen“.' : 'Projektsicherung gespeichert.');
+      }
     } else {
-      const next = await window.desk[action === 'new' ? 'newProject' : 'openProject']();
+      const method = action.startsWith('new') ? 'newProject' : 'openProject';
+      const next = await window.desk[method](action.endsWith('-cloud'), details);
       if (next) startProject(next);
     }
   } catch (error) { errorToast(error); }
   finally { projectDialogBusy = false; }
-};
+}
 $('#chapter-title').addEventListener('input', event => {
   chapter().title = event.target.value;
   renderChapters();
@@ -638,16 +762,17 @@ $('#material-list').onclick = async event => {
         renderMaterials();
       }, 'Entfernen');
     }
-    if (action === 'transcript') showTranscript(item.transcript, item.name, target);
+    if (action === 'transcript') showTranscript(item.transcript, item.name, target, id);
     if (action === 'transcribe') {
       if (transcribing || recording) return toast('Eine Sprachaufgabe läuft bereits.');
       transcribing = true;
       toast('Die Datei wird transkribiert …');
       try {
+        if (!flush()) return;
         const result = await window.desk.transcribe(id, state.settings.speech);
         state.assets = await window.desk.saveTranscript(id, result);
         renderMaterials();
-        showTranscript(result, item.name, target);
+        showTranscript(result, item.name, target, id);
       } finally { transcribing = false; }
     }
   } catch (error) { errorToast(error); }
@@ -689,8 +814,19 @@ document.addEventListener('keydown', event => {
   if (event.key === 'Escape' && document.body.classList.contains('focus')) toggleFocus();
 });
 decorate();
-window.desk.get().then(startProject).catch(errorToast);
-window.desk.identity().then(({ name, version }) => {
+Promise.all([window.desk.get(), window.desk.locations()]).then(([project, locations]) => {
+  readingAccess = appearance.normalizeAccess(locations.access);
+  startProject(project);
+}).catch(errorToast);
+window.desk.unavailableProject().then(path => {
+  if (path) toast('Das letzte Projekt ist derzeit nicht verfügbar. Öffne es erneut, sobald der Ordner erreichbar ist.\n' + path, true);
+}).catch(errorToast);
+for (const button of $$('[data-window-action]')) {
+  button.onclick = () => window.desk.windowControl(button.dataset.windowAction).then(updateWindowControls).catch(errorToast);
+}
+window.desk.onWindowState(updateWindowControls);
+window.desk.identity().then(({ name, version, window: status }) => {
+  updateWindowControls(status);
   const title = name + ' ' + version;
   document.title = title;
   $('#app-brand').textContent = title;
