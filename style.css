@@ -297,3 +297,8 @@ body.focus .editor-view{grid-template-columns:minmax(0,1fr)}
 [data-high-contrast=true]{--control-border:var(--line-strong)}
 :is(select,textarea,.secondary,.project-button,.board-chapter,#font-picker),input:not([type=checkbox]):not([type=radio]):not(.chapter-title){border-color:var(--control-border)}
 .storyboard-toolbar button[aria-pressed=true]{background:var(--green);color:var(--sheet)}
+
+.settings-support{display:flex;align-items:center;border-top:1px solid var(--line);padding-top:10px;margin:5px 0 12px}
+#kofi-support{display:inline-flex;align-items:center;justify-content:center;max-width:100%;min-height:44px;padding:4px 0;border:0;background:none;border-radius:9px 9px 9px 0}
+#kofi-support img{display:block;width:178px;max-width:100%;height:auto;border-radius:9px 9px 9px 0}
+#kofi-support:hover img{box-shadow:0 0 0 1px var(--control-border)}

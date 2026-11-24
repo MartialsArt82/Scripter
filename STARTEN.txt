@@ -1,4 +1,4 @@
-SCRIPTER 1.3.0
+SCRIPTER 1.3.1
 
 Windows x64
   Die ZIP-Datei vollständig entpacken. Im Ordner „Scripter“
@@ -6,7 +6,7 @@ Windows x64
 
 Fedora und Nobara x64
   Das RPM herunterladen und per Terminal installieren:
-    sudo dnf install ./scripter-1.3.0-1.x86_64.rpm
+    sudo dnf install ./scripter-1.3.1-1.x86_64.rpm
   „Scripter“ über die Anwendungsübersicht öffnen. Unter GNOME mit
   Rechtsklick auf das Symbol und „Zu Favoriten hinzufügen“ anheften.
   Unter KDE im Anwendungsmenü oder in der Taskleiste anheften.

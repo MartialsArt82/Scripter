@@ -553,6 +553,7 @@ app.whenReady().then(() => {
     return (await checkerFor(lang)).suggest(word).slice(0, 12);
   });
   handle('copy', text => clipboard.writeText(String(text)));
+  handle('open-kofi', () => shell.openExternal('https://ko-fi.com/paulweigl/tip'));
   handle('save-transcript', (id, result) => {
     const item = asset(id);
     const previous = item.transcript;

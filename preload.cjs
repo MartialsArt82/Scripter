@@ -15,5 +15,6 @@ contextBridge.exposeInMainWorld('desk', {
   refreshTranscript: value => call('refresh-transcript', value), setup: () => call('setup'),
   windowControl: action => call('window-control', action),
   onWindowState: callback => { ipcRenderer.on('window-state', (_, value) => callback(value)); },
+  openKofi: () => call('open-kofi'),
   help: () => call('help')
 });

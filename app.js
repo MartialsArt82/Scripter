@@ -301,6 +301,9 @@ async function settingsDialog() {
     field('Darstellung', `<select name="theme">${option('light','Hell',settings.theme)}${option('dark','Dunkel',settings.theme)}</select>`),
     fontPreview(settings.font),
     field('Bildschirmskalierung', `<select name="zoom">${appearance.zoomLevels.map(zoom => option(zoom,zoom + ' %',access.zoom ?? settings.zoom)).join('')}</select>`),
+    `<div class="settings-support"><button type="button" id="kofi-support" aria-label="Scripter auf Ko-fi unterstützen (öffnet den Browser)">
+      <img src="assets/kofi-${settings.theme === 'dark' ? 'beige' : 'dark'}.avif" width="980" height="198" alt="">
+    </button></div>`,
     accessibilityFields(access),
     field('Transkriptsprache', `<select name="speech">${Object.entries({auto:'Automatisch',de:'Deutsch',en:'Englisch'}).map(([lang,label]) => option(lang,label,settings.speech)).join('')}</select>`),
     '<h3>Speicherorte</h3>',
@@ -322,6 +325,7 @@ async function settingsDialog() {
     renderLayout();
     queueSave();
   });
+  $('#kofi-support').onclick = () => window.desk.openKofi().catch(errorToast);
   $('#font-picker').onchange = event => {
     if (event.target.name !== 'font') return;
     const name = event.target.value;
