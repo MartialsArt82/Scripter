@@ -1,6 +1,7 @@
 {
   "name": "scripter",
   "version": "1.4",
+  "androidVersionCode": 10401,
   "description": "Lokale Schreibwerkstatt für Romane",
   "main": "main.cjs",
   "private": true,

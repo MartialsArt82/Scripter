@@ -12,6 +12,8 @@
   display:none;position:fixed;inset:0 auto 0 0;z-index:5;
   width:min(86vw,320px);overflow:auto;overscroll-behavior:contain;padding-bottom:20px
 }
+.mobile-app .sidebar{max-height:none}
+.mobile-app .sidebar>*{flex-shrink:0}
 .mobile-app .inspector{inset:0 0 0 auto;width:min(90vw,350px)}
 .mobile-app[data-mobile-panel=navigation] .sidebar,.mobile-app[data-mobile-panel=tools] .inspector{display:flex}
 #mobile-scrim{position:fixed;inset:0;background:#0007;z-index:4}
