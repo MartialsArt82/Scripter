@@ -9,7 +9,8 @@ tools="${SCRIPTER_ANDROID_TOOLS:-$sdk/build-tools/35.0.0}"
 platform="$sdk/platforms/android-35/android.jar"
 jdk="${JAVA_HOME:+$JAVA_HOME/bin/}"
 version=$(node -p "require('./package.json').version")
-code=$(node -e 'const [major,minor,patch=0]=require("./package.json").version.split(".").map(Number); console.log(major*10000+minor*100+patch)')
+code=$(node -p "require('./package.json').androidVersionCode")
+[[ "$code" =~ ^[1-9][0-9]*$ ]]
 scratch=$(mktemp -d)
 trap 'rm -rf -- "$scratch"' EXIT
 
