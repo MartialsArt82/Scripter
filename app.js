@@ -4,6 +4,25 @@ const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const editor = $('#manuscript');
 const modal = $('#modal');
+const mobile = window.desk.mobile === true;
+if (mobile) {
+  document.body.classList.add('mobile-app');
+  $('#mobile-navigation').hidden = false;
+  $('#mobile-tools').hidden = false;
+  $('#mobile-navigation').onclick = () => toggleMobilePanel('navigation');
+  $('#mobile-tools').onclick = () => toggleMobilePanel('tools');
+  $('#mobile-scrim').onclick = closeMobilePanels;
+}
+function toggleMobilePanel(name) {
+  const panel = document.body.dataset.mobilePanel === name ? '' : name;
+  document.body.dataset.mobilePanel = panel;
+  $('#mobile-navigation').setAttribute('aria-expanded', String(panel === 'navigation'));
+  $('#mobile-tools').setAttribute('aria-expanded', String(panel === 'tools'));
+  $('#mobile-scrim').hidden = !panel;
+}
+function closeMobilePanels() {
+  if (mobile && document.body.dataset.mobilePanel) toggleMobilePanel(document.body.dataset.mobilePanel);
+}
 const langs = { de: 'Deutsch', en: 'Englisch', es: 'Spanisch', pt: 'Portugiesisch', fr: 'Französisch' };
 const types = { text: 'Textdatei', image: 'Bild', pdf: 'PDF', audio: 'Audio', video: 'Video', web: 'Webseite', file: 'Datei' };
 const icons = { text: 'file-text', image: 'image', pdf: 'file-text', audio: 'headphones', video: 'video', web: 'globe', file: 'file' };
@@ -11,7 +30,7 @@ let readingAccess = appearance.normalizeAccess();
 const exportsList = { pdf: 'PDF · Buchsatz', docx: 'DOCX · Word', doc: 'DOC · Word 97–2003', odt: 'ODT · OpenDocument', epub: 'EPUB 3 · E-Book', rtf: 'RTF · Rich Text', txt: 'TXT · Reintext', markdown: 'Markdown', html: 'HTML', latex: 'LaTeX', icml: 'ICML · Adobe InCopy' };
 const trueWords = /[\p{L}\p{N}]+(?:[’'\-][\p{L}\p{N}]+)*/gu;
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
-const number = value => Number(value).toLocaleString('de-DE');
+const number = value => Number(value).toLocaleString(document.documentElement.lang);
 const cleanOptions = {
   ALLOWED_TAGS: ['a','b','blockquote','br','code','del','div','em','font','h1','h2','h3','h4','h5','h6','hr','i','img','li','ol','p','pre','s','span','strike','strong','sub','sup','table','tbody','td','th','thead','tr','u','ul'],
   ALLOWED_ATTR: ['alt','colspan','rowspan','href','src','style','align','dir','title']
@@ -49,11 +68,11 @@ function toast(message, error = false) {
   toastTimer = setTimeout(() => { node.hidden = true; }, error ? 12500 : 3800);
 }
 function errorToast(error) {
-  toast(error.message.replace(/^Error invoking remote method '[^']+': Error: /, ''), true);
+  toast(t(error.message.replace(/^Error invoking remote method '[^']+': Error: /, '')), true);
 }
 function queueSave() {
   dirty = true;
-  $('#save-status').textContent = 'Speichert …';
+  $('#save-status').textContent = t("Speichert …");
   clearTimeout(saveTimer);
   saveTimer = setTimeout(flush, 380);
 }
@@ -63,22 +82,22 @@ function flush() {
   const result = window.desk.flush(state);
   const saved = result === true;
   dirty = !saved;
-  $('#save-status').textContent = saved ? 'Lokal gespeichert' : 'Speichern fehlgeschlagen';
-  if (!saved) toast(typeof result === 'string' ? result : 'Das Projekt konnte nicht gespeichert werden.', true);
+  $('#save-status').textContent = saved ? t("Lokal gespeichert") : t("Speichern fehlgeschlagen");
+  if (!saved) toast(typeof result === 'string' ? result : t("Das Projekt konnte nicht gespeichert werden."), true);
   return saved;
 }
 function refreshMetrics() {
   const count = counts.get(chapter().id) || 0;
   const target = Number(chapter().goal) || 0;
   const pc = target ? Math.round(count / target * 100) : 0;
-  $('#total-words').textContent = number([...counts.values()].reduce((total, next) => total + next, 0)) + ' Wörter';
-  $('#chapter-metrics').textContent = number(count) + (count === 1 ? ' Wort' : ' Wörter') + ' · ' + number(editor.innerText.length) + ' Zeichen';
+  $('#total-words').textContent = number([...counts.values()].reduce((total, next) => total + next, 0)) + ' ' + t("Wörter");
+  $('#chapter-metrics').textContent = number(count) + ' ' + (count === 1 ? t("Wort") : t("Wörter")) + ' · ' + number(editor.innerText.length) + ' ' + t("Zeichen");
   $('#status-count').textContent = view === 'editor' ? $('#chapter-metrics').textContent : '';
   $('#goal-current').textContent = number(count);
-  $('#goal-amount').textContent = target ? '/ ' + number(target) + ' Wörter' : 'Wörter';
+  $('#goal-amount').textContent = target ? '/ ' + number(target) + ' ' + t("Wörter") : t("Wörter");
   $('#goal-progress').hidden = !target;
   $('#goal-progress').value = Math.min(100, pc);
-  $('#goal-caption').textContent = !target ? 'Kein Wortziel' : count >= target ? 'Ziel erreicht' : pc + ' % erreicht';
+  $('#goal-caption').textContent = !target ? t("Kein Wortziel") : count >= target ? t("Ziel erreicht") : t("{percent} % erreicht", { percent: number(pc) });
 }
 function edited() {
   const item = chapter();
@@ -92,7 +111,7 @@ function edited() {
 function renderProject() {
   $('#project-name').textContent = state.title;
   const category = appearance.categories[state.category] ?? appearance.categories.general;
-  $('#project-category').textContent = category.label;
+  $('#project-category').textContent = t(category.label);
   const symbol = $('#project-menu .project-symbol');
   symbol.dataset.icon = category.icon;
   symbol.replaceChildren();
@@ -104,15 +123,15 @@ function renderProject() {
 }
 function renderChapters() {
   $('#chapter-list').innerHTML = state.chapters.map((item, index) => `<div class="chapter-row ${item.id === chapter().id ? 'current' : ''}">
-    <button class="choose-chapter" data-id="${esc(item.id)}" ${item.id === chapter().id ? 'aria-current="true"' : ''}><span class="order">${String(index + 1).padStart(2,'0')}</span><span>${esc(item.title || 'Ohne Titel')}</span></button>
-    <button class="icon-button chapter-options" data-id="${esc(item.id)}" data-icon="ellipsis" title="Kapiteloptionen" aria-label="Kapiteloptionen"></button></div>`).join('');
+    <button class="choose-chapter" data-id="${esc(item.id)}" ${item.id === chapter().id ? 'aria-current="true"' : ''}><span class="order">${String(index + 1).padStart(2,'0')}</span><span>${esc(item.title || t("Ohne Titel"))}</span></button>
+    <button class="icon-button chapter-options" data-id="${esc(item.id)}" data-icon="ellipsis" title="${esc(t("Kapiteloptionen"))}" aria-label="${esc(t("Kapiteloptionen"))}"></button></div>`).join('');
   decorate($('#chapter-list'));
 }
 function renderChapter() {
   const item = chapter();
   state.active = item.id;
   selection = null;
-  $('#chapter-number').textContent = 'Kapitel ' + String(state.chapters.indexOf(item) + 1).padStart(2, '0');
+  $('#chapter-number').textContent = t("Kapitel") + ' ' + String(state.chapters.indexOf(item) + 1).padStart(2, '0');
   $('#chapter-title').value = item.title;
   $('#intent').value = item.intent || '';
   editor.innerHTML = sanitize(item.html || '');
@@ -171,7 +190,7 @@ function runEdit(command, value = null) {
 }
 function insertContent(html, target = chapter().id) {
   const item = state.chapters.find(entry => entry.id === target);
-  if (!item) { toast('Das ursprüngliche Kapitel wurde entfernt.', true); return; }
+  if (!item) { toast(t("Das ursprüngliche Kapitel wurde entfernt."), true); return; }
   const content = sanitize(html);
   if (!content) return;
   if (chapter().id === target) {
@@ -207,24 +226,26 @@ function showView(name) {
   if (view === 'storyboard' && name !== 'storyboard') cancelLink();
   view = name;
   if (name !== 'editor') document.body.classList.remove('focus');
+  closeMobilePanels();
+  if (mobile) $('#mobile-tools').hidden = name !== 'editor';
   for (const button of $$('[data-view]')) {
     button.classList.toggle('active', button.dataset.view === name);
     if (button.dataset.view === name) button.setAttribute('aria-current', 'page');
     else button.removeAttribute('aria-current');
   }
   for (const key of ['editor','storyboard','material','layout']) $('#' + key + '-view').hidden = key !== name;
-  $('#crumb-view').textContent = { editor: 'Schreiben', storyboard: 'Storyboard', material: 'Material', layout: 'Buchsatz' }[name];
+  $('#crumb-view').textContent = { editor: t("Schreiben"), storyboard: t("Storyboard"), material: t("Material"), layout: t("Buchsatz") }[name];
   if (name === 'storyboard') renderStoryboard();
   refreshMetrics();
 }
-function openModal(title, content, action, verb = 'Speichern') {
+function openModal(title, content, action, verb = t("Speichern")) {
   $('#modal-title').textContent = title;
   $('#modal-content').onclick = null;
   $('#modal-content').innerHTML = content;
   $('#confirm-modal').textContent = verb;
   $('#confirm-modal').hidden = !action;
   $('#confirm-modal').disabled = false;
-  $('#cancel-modal').textContent = action ? 'Abbrechen' : 'Schließen';
+  $('#cancel-modal').textContent = action ? t("Abbrechen") : t("Schließen");
   modalAction = action;
   decorate(modal);
   if (!modal.open) modal.showModal();
@@ -245,9 +266,10 @@ function formatState() {
   }
 }
 function newChapter() {
-  openModal('Kapitel hinzufügen', field('Kapiteltitel', '<input name="title" required maxlength="150" autofocus>'), data => {
+  closeMobilePanels();
+  openModal(t("Kapitel hinzufügen"), field(t("Kapiteltitel"), '<input name="title" required maxlength="150" autofocus>'), data => {
     const title = String(data.get('title')).trim();
-    if (!title) throw new Error('Bitte gib einen Kapiteltitel ein.');
+    if (!title) throw new Error(t("Bitte gib einen Kapiteltitel ein."));
     const item = { id: crypto.randomUUID(), title, goal: 1500, intent: '', html: '' };
     state.chapters.push(item);
     state.active = item.id;
@@ -255,17 +277,17 @@ function newChapter() {
     renderChapter();
     showView('editor');
     queueSave();
-  }, 'Hinzufügen');
+  }, t("Hinzufügen"));
 }
 function chapterOptions(id) {
   const item = state.chapters.find(entry => entry.id === id);
   const index = state.chapters.indexOf(item);
-  openModal(item.title || 'Kapitel', `<div class="actions"><button type="button" class="secondary" id="move-up" ${index === 0 ? 'disabled' : ''}>Nach oben</button><button type="button" class="secondary" id="move-down" ${index === state.chapters.length - 1 ? 'disabled' : ''}>Nach unten</button><button type="button" class="secondary" id="delete-chapter" ${state.chapters.length === 1 ? 'disabled' : ''}>Löschen …</button></div>`);
+  openModal(item.title || t("Kapitel"), `<div class="actions"><button type="button" class="secondary" id="move-up" ${index === 0 ? 'disabled' : ''}>${esc(t("Nach oben"))}</button><button type="button" class="secondary" id="move-down" ${index === state.chapters.length - 1 ? 'disabled' : ''}>${esc(t("Nach unten"))}</button><button type="button" class="secondary" id="delete-chapter" ${state.chapters.length === 1 ? 'disabled' : ''}>${esc(t("Löschen …"))}</button></div>`);
   const move = offset => {
     state.chapters.splice(index, 1);
     state.chapters.splice(index + offset, 0, item);
-    if (item.id === chapter().id) $('#chapter-number').textContent = 'Kapitel ' + String(index + offset + 1).padStart(2,'0');
-    else $('#chapter-number').textContent = 'Kapitel ' + String(state.chapters.indexOf(chapter()) + 1).padStart(2,'0');
+    if (item.id === chapter().id) $('#chapter-number').textContent = t("Kapitel") + ' ' + String(index + offset + 1).padStart(2,'0');
+    else $('#chapter-number').textContent = t("Kapitel") + ' ' + String(state.chapters.indexOf(chapter()) + 1).padStart(2,'0');
     renderChapters();
     queueSave();
     modal.close();
@@ -273,18 +295,18 @@ function chapterOptions(id) {
   $('#move-up').onclick = () => move(-1);
   $('#move-down').onclick = () => move(1);
   $('#delete-chapter').onclick = () => {
-    openModal('Kapitel löschen?', `<p>„${esc(item.title)}“ und sein Manuskripttext werden aus dem Projekt entfernt.</p>`, () => {
+    openModal(t("Kapitel löschen?"), `<p>${esc(t("„{title}“ und sein Manuskripttext werden aus dem Projekt entfernt.", { title: item.title }))}</p>`, () => {
       state.chapters.splice(index, 1);
       for (const note of state.storyboard) note.chapters = note.chapters.filter(chapterId => chapterId !== id);
       counts.delete(id);
       if (state.active === id) { state.active = state.chapters[Math.min(index, state.chapters.length - 1)].id; renderChapter(); }
       else {
         renderChapters();
-        $('#chapter-number').textContent = 'Kapitel ' + String(state.chapters.indexOf(chapter()) + 1).padStart(2,'0');
+        $('#chapter-number').textContent = t("Kapitel") + ' ' + String(state.chapters.indexOf(chapter()) + 1).padStart(2,'0');
         refreshMetrics();
       }
       queueSave();
-    }, 'Löschen');
+    }, t("Löschen"));
   };
 }
 const cloudProviders = { google: 'Google Drive', onedrive: 'OneDrive', dropbox: 'Dropbox', icloud: 'iCloud Drive', other: 'Anderer Anbieter' };
@@ -292,28 +314,33 @@ async function settingsDialog() {
   const settings = state.settings;
   const locations = await window.desk.locations();
   const access = appearance.normalizeAccess(locations.access);
-  const locationField = (label, name) => `<div class="modal-field"><span>${label}</span><div class="location-field">
-    <input id="${name}-path" aria-label="${label}" readonly>
-    <button type="button" id="${name}-choose" class="secondary">Auswählen</button>
-    <button type="button" id="${name}-clear" class="text-button">Entfernen</button>
+  const locationField = (label, name) => `<div class="modal-field"><span>${esc(label)}</span><div class="location-field">
+    <input id="${name}-path" aria-label="${esc(label)}" readonly>
+    <button type="button" id="${name}-choose" class="secondary">${esc(t("Auswählen"))}</button>
+    <button type="button" id="${name}-clear" class="text-button">${esc(t("Entfernen"))}</button>
   </div></div>`;
-  openModal('Einstellungen', [
-    field('Darstellung', `<select name="theme">${option('light','Hell',settings.theme)}${option('dark','Dunkel',settings.theme)}</select>`),
+  closeMobilePanels();
+  openModal(t("Einstellungen"), [
+    field(t("Oberflächensprache"), `<select name="uiLanguage">${Object.entries(scripterI18n.languages).map(([key, label]) => option(key, label, locations.uiLanguage)).join('')}</select>`),
+    field(t("Darstellung"), `<select name="theme">${option('light',t("Hell"),settings.theme)}${option('dark',t("Dunkel"),settings.theme)}</select>`),
     fontPreview(settings.font),
-    field('Bildschirmskalierung', `<select name="zoom">${appearance.zoomLevels.map(zoom => option(zoom,zoom + ' %',access.zoom ?? settings.zoom)).join('')}</select>`),
-    `<div class="settings-support"><button type="button" id="kofi-support" aria-label="Scripter auf Ko-fi unterstützen (öffnet den Browser)">
+    field(t("Bildschirmskalierung"), `<select name="zoom">${appearance.zoomLevels.map(zoom => option(zoom,zoom + ' %',access.zoom ?? settings.zoom)).join('')}</select>`),
+    `<div class="settings-support"><button type="button" id="kofi-support" aria-label="${esc(t("Scripter auf Ko-fi unterstützen (öffnet den Browser)"))}">
       <img src="assets/kofi-${settings.theme === 'dark' ? 'beige' : 'dark'}.avif" width="980" height="198" alt="">
     </button></div>`,
     accessibilityFields(access),
-    field('Transkriptsprache', `<select name="speech">${Object.entries({auto:'Automatisch',de:'Deutsch',en:'Englisch'}).map(([lang,label]) => option(lang,label,settings.speech)).join('')}</select>`),
-    '<h3>Speicherorte</h3>',
-    locationField('Wunschort für neue lokale Projekte', 'preferred'),
-    '<h3>Cloud-Synchronisation</h3>',
-    field('Anbieter', `<select id="cloud-provider">${Object.entries(cloudProviders).map(([key,label]) => option(key,label,locations.provider)).join('')}</select>`),
-    locationField('Synchronisierter Ordner', 'cloud'),
-    '<p>Wähle einen lokal eingebundenen Ordner deines Anbieters. Sein Sync-Programm gleicht die Dateien ab. Im Projektmenü kannst du Cloud-Projekte anlegen, öffnen oder eine Kopie dorthin speichern.</p>',
-    '<p>Für Diktat und Transkripte brauchst du Python 3.12. Bei der Einrichtung wird das mehrsprachige Whisper-Modell heruntergeladen. Die Erkennung läuft danach lokal.</p><button id="speech-setup" type="button" class="secondary">Spracherkennung einrichten</button><p id="setup-status" role="status"></p>'
+    field(t(mobile ? "Diktatsprache" : "Transkriptsprache"), `<select name="speech">${Object.entries({auto:'Automatisch', ...(mobile ? langs : { de: 'Deutsch', en: 'Englisch' })}).map(([lang,label]) => option(lang,t(label),settings.speech)).join('')}</select>`),
+    ...(!mobile ? [
+    ("<h3>" + esc(t("Speicherorte")) + "</h3>"),
+    locationField(t("Wunschort für neue lokale Projekte"), 'preferred'),
+    ("<h3>" + esc(t("Cloud-Synchronisation")) + "</h3>"),
+    field(t("Anbieter"), `<select id="cloud-provider">${Object.entries(cloudProviders).map(([key,label]) => option(key,t(label),locations.provider)).join('')}</select>`),
+    locationField(t("Synchronisierter Ordner"), 'cloud'),
+    ("<p>" + esc(t("Wähle einen lokal eingebundenen Ordner deines Anbieters. Sein Sync-Programm gleicht die Dateien ab. Im Projektmenü kannst du Cloud-Projekte anlegen, öffnen oder eine Kopie dorthin speichern.")) + "</p>"),
+    ("<p>" + esc(t("Für Diktat und Transkripte brauchst du Python 3.12. Bei der Einrichtung wird das mehrsprachige Whisper-Modell heruntergeladen. Die Erkennung läuft danach lokal.")) + "</p><button id=\"speech-setup\" type=\"button\" class=\"secondary\">" + esc(t("Spracherkennung einrichten")) + "</button><p id=\"setup-status\" role=\"status\"></p>")
+    ] : [`<p>${esc(t("Android verwendet für Diktat die Spracherkennung des Geräts."))}</p>`] )
   ].join(''), async data => {
+    locations.uiLanguage = data.get('uiLanguage');
     locations.access = appearance.normalizeAccess({
       zoom: Number(data.get('zoom')), textSize: Number(data.get('textSize')), lineHeight: Number(data.get('lineHeight')),
       highContrast: data.has('highContrast'), strongFocus: data.has('strongFocus'), reduceMotion: data.has('reduceMotion')
@@ -321,6 +348,7 @@ async function settingsDialog() {
     readingAccess = (await window.desk.saveLocations(locations)).access;
     for (const name of ['theme','font','speech']) settings[name] = data.get(name);
     settings.zoom = readingAccess.zoom;
+    if (locations.uiLanguage !== scripterI18n.getLanguage()) applyInterfaceLanguage(locations.uiLanguage);
     renderPreferences();
     renderLayout();
     queueSave();
@@ -332,12 +360,13 @@ async function settingsDialog() {
     $('#selected-font').textContent = name;
     $('#selected-font').style.fontFamily = appearance.fontStack(name);
   };
+  if (mobile) return;
   const refreshLocations = () => {
     $('#preferred-path').value = locations.preferred;
-    $('#preferred-path').placeholder = 'Standardordner (Dokumente)';
+    $('#preferred-path').placeholder = t("Standardordner (Dokumente)");
     $('#preferred-clear').disabled = !locations.preferred;
     $('#cloud-path').value = locations.clouds[locations.provider] || '';
-    $('#cloud-path').placeholder = 'Ordner auswählen';
+    $('#cloud-path').placeholder = t("Ordner auswählen");
     $('#cloud-clear').disabled = !locations.clouds[locations.provider];
   };
   $('#cloud-provider').onchange = event => { locations.provider = event.target.value; refreshLocations(); };
@@ -361,13 +390,13 @@ async function settingsDialog() {
   $('#speech-setup').onclick = async event => {
     const button = event.currentTarget;
     button.disabled = true;
-    $('#setup-status').textContent = 'Pakete und Modell werden heruntergeladen …';
+    $('#setup-status').textContent = t("Pakete und Modell werden heruntergeladen …");
     try {
       await window.desk.setup();
-      if (button.isConnected) $('#setup-status').textContent = 'Spracherkennung ist eingerichtet.';
-      else toast('Spracherkennung ist eingerichtet.');
+      if (button.isConnected) $('#setup-status').textContent = t("Spracherkennung ist eingerichtet.");
+      else toast(t("Spracherkennung ist eingerichtet."));
     } catch (error) {
-      if (button.isConnected) $('#setup-status').textContent = 'Einrichtung fehlgeschlagen. Siehe Hilfe.';
+      if (button.isConnected) $('#setup-status').textContent = t("Einrichtung fehlgeschlagen. Siehe Hilfe.");
       errorToast(error);
     } finally { button.disabled = false; }
   };
@@ -377,15 +406,15 @@ function renderMaterials() {
     const id = esc(item.id);
     const media = ['audio','video'].includes(item.kind);
     const preview = item.kind === 'image' && /\.(png|jpe?g|webp|gif|bmp|avif)$/i.test(item.file || '');
-    const insertable = ['text','image','pdf','web'].includes(item.kind);
+    const insertable = mobile ? ['image', 'web'].includes(item.kind) || /\.(?:txt|md|markdown|csv)$/i.test(item.file || '') : ['text','image','pdf','web'].includes(item.kind);
     return `<article class="asset" data-id="${id}">
-      ${preview ? `<img src="romanasset://${id}/vorschau" alt="">` : `<span class="panel-icon" data-icon="${icons[item.kind] || 'file'}"></span>`}
-      <div class="asset-info"><strong>${esc(item.name)}</strong><small>${esc(item.url || types[item.kind] || 'Datei')}</small></div>
-      <button class="secondary" data-asset="open">Öffnen</button>
-      ${media ? '<button class="secondary" data-asset="transcribe">Transkribieren</button>' : ''}
-      ${item.transcript ? '<button class="secondary" data-asset="transcript">Transkript ansehen</button>' : ''}
-      ${insertable ? '<button class="secondary" data-asset="insert">Ins Kapitel</button>' : ''}
-      <button class="icon-button" data-asset="delete" aria-label="Material entfernen" title="Material entfernen" data-icon="trash-2"></button>
+      ${preview ? `<img src="${mobile ? esc(window.desk.materialUrl(item)) : 'romanasset://' + id + '/vorschau'}" alt="">` : `<span class="panel-icon" data-icon="${icons[item.kind] || 'file'}"></span>`}
+      <div class="asset-info"><strong>${esc(item.name)}</strong><small>${esc(item.url || t(types[item.kind] || "Datei"))}</small></div>
+      <button class="secondary" data-asset="open">${esc(t("Öffnen"))}</button>
+      ${media && !mobile ? ("<button class=\"secondary\" data-asset=\"transcribe\">" + esc(t("Transkribieren")) + "</button>") : ''}
+      ${item.transcript ? ("<button class=\"secondary\" data-asset=\"transcript\">" + esc(t("Transkript ansehen")) + "</button>") : ''}
+      ${insertable ? ("<button class=\"secondary\" data-asset=\"insert\">" + esc(t("Ins Kapitel")) + "</button>") : ''}
+      <button class="icon-button" data-asset="delete" aria-label="${esc(t("Material entfernen"))}" title="${esc(t("Material entfernen"))}" data-icon="trash-2"></button>
     </article>`;
   }).join('');
   decorate($('#material-list'));
@@ -401,9 +430,10 @@ async function importFiles(files, urls = []) {
       errors = result.errors;
     }
     for (const url of urls) state.assets = await window.desk.addLink(url);
+    if (mobile) { queueSave(); flush(); }
     renderMaterials();
     showView('material');
-    if (errors.length) toast('Diese Dateien konnten nicht importiert werden: ' + errors.join(', '), true);
+    if (errors.length) toast(t("Diese Dateien konnten nicht importiert werden: {files}", { files: errors.join(', ') }), true);
   } catch (error) { errorToast(error); }
   finally { imports--; }
 }
@@ -416,25 +446,25 @@ function showTranscript(result, name, target, assetId) {
   const corrected = result.segments.some(segment => segment.originalText != null);
   const original = corrected ? result.segments.map(segment => segment.originalText ?? segment.text).join('\n') : '';
   const value = result.segments.map(segment => segment.text).join('\n');
-  if (!value) { toast('Es wurde keine Sprache erkannt.'); return; }
-  openModal(name, `<p>${esc(langs[result.language] || result.language)} · ${number(result.segments.length)} Abschnitte</p>
-    <textarea id="transcript-text" rows="10" aria-label="Transkript" readonly>${esc(timed)}</textarea>
-    ${corrected ? `<details class="speech-original"><summary>Ursprüngliche Erkennung anzeigen</summary><textarea id="transcript-original" rows="5" aria-label="Ursprüngliche Erkennung" readonly>${esc(original)}</textarea></details>` : ''}
-    <button type="button" id="learn-transcript" class="secondary">Markierung lernen</button>`, () => {
+  if (!value) { toast(t("Es wurde keine Sprache erkannt.")); return; }
+  openModal(name, `<p>${esc(t(langs[result.language] || result.language))} · ${esc(t("{count} Abschnitte", { count: number(result.segments.length) }))}</p>
+    <textarea id="transcript-text" rows="10" aria-label="${esc(t("Transkript"))}" readonly>${esc(timed)}</textarea>
+    ${corrected ? `<details class="speech-original"><summary>${esc(t("Ursprüngliche Erkennung anzeigen"))}</summary><textarea id="transcript-original" rows="5" aria-label="${esc(t("Ursprüngliche Erkennung"))}" readonly>${esc(original)}</textarea></details>` : ''}
+    <button type="button" id="learn-transcript" class="secondary">${esc(t("Markierung lernen"))}</button>`, () => {
     modal.close();
     insertContent(paragraphs(value), target);
-  }, 'Ins Kapitel');
+  }, t("Ins Kapitel"));
   $('#learn-transcript').onclick = () => {
     const selected = [...$('#modal-content').querySelectorAll('textarea')].find(textarea =>
       textarea.selectionEnd > textarea.selectionStart);
     const marked = selected?.value.slice(selected.selectionStart, selected.selectionEnd).trim();
-    if (!marked) return toast('Markiere zuerst das Wort oder die Wendung im Transkript.');
-    if (marked.length > 160 || /\[\d+:\d+\]/.test(marked)) return toast('Markiere höchstens 160 Zeichen ohne Zeitstempel.');
+    if (!marked) return toast(t("Markiere zuerst das Wort oder die Wendung im Transkript."));
+    if (marked.length > 160 || /\[\d+:\d+\]/.test(marked)) return toast(t("Markiere höchstens 160 Zeichen ohne Zeitstempel."));
     editSpeechRule({
       marked,
       language: ['de','en'].includes(result.language) ? result.language : 'any',
       onSaved: async () => {
-        if (!flush()) throw new Error('Das Sprachwörterbuch konnte nicht gespeichert werden.');
+        if (!flush()) throw new Error(t("Das Sprachwörterbuch konnte nicht gespeichert werden."));
         const updated = await window.desk.refreshTranscript(result);
         state.assets = await window.desk.saveTranscript(assetId, updated);
         showTranscript(updated, name, target, assetId);
@@ -453,16 +483,17 @@ function renderLayout() {
   $('#book-cover h2').style.fontFamily = 'inherit';
 }
 function manuscript(scope = 'book') {
-  return { title: state.title, author: state.author, settings: state.settings, chapters: (scope === 'chapter' ? [chapter()] : state.chapters).map(item => ({ title: item.title || 'Ohne Titel', html: sanitize(item.html) })) };
+  return { title: state.title, author: state.author, settings: state.settings, chapters: (scope === 'chapter' ? [chapter()] : state.chapters).map(item => ({ title: item.title || t("Ohne Titel"), html: sanitize(item.html) })) };
 }
 function publicationDialog() {
-  const content = '<div class="export-grid">' + Object.entries(exportsList).map(([key,label]) => `<label><input type="radio" name="format" value="${key}" ${key === 'pdf' ? 'checked' : ''}>${esc(label)}</label>`).join('') + '</div>'
-    + '<p>Für das ältere Word-Format DOC ist LibreOffice erforderlich.</p>'
-    + field('Umfang', '<select name="scope"><option value="book">Gesamtes Manuskript</option><option value="chapter">Aktuelles Kapitel</option></select>');
-  openModal('Manuskript exportieren', content, async data => {
-    if (await window.desk.publish(data.get('format'), manuscript(data.get('scope')))) toast('Manuskript exportiert.');
-    else return false;
-  }, 'Exportieren');
+  const content = '<div class="export-grid">' + Object.entries(exportsList).filter(([key]) => !mobile || window.desk.exportFormats.includes(key)).map(([key,label]) => `<label><input type="radio" name="format" value="${key}" ${key === 'pdf' ? 'checked' : ''}>${esc(t(label))}</label>`).join('') + '</div>'
+    + (mobile ? '' : "<p>" + esc(t("Für das ältere Word-Format DOC ist LibreOffice erforderlich.")) + "</p>")
+    + field(t("Umfang"), ("<select name=\"scope\"><option value=\"book\">" + esc(t("Gesamtes Manuskript")) + "</option><option value=\"chapter\">" + esc(t("Aktuelles Kapitel")) + "</option></select>"));
+  openModal(t("Manuskript exportieren"), content, async data => {
+    const result = await window.desk.publish(data.get('format'), manuscript(data.get('scope')));
+    if (result === true) toast(t("Manuskript exportiert."));
+    else if (!result) return false;
+  }, t("Exportieren"));
 }
 function toggleFocus() {
   document.body.classList.toggle('focus');
@@ -470,8 +501,17 @@ function toggleFocus() {
 }
 async function dictate() {
   if (recording) return recording.stop();
-  if (transcribing) return toast('Eine Transkription läuft bereits.');
+  if (transcribing) return toast(t("Eine Transkription läuft bereits."));
   const target = chapter().id;
+  if (mobile) {
+    transcribing = true;
+    try {
+      const content = await window.desk.dictate(state.settings.speech === 'auto' ? state.settings.lang : state.settings.speech, state.speechRules);
+      if (content) insertContent(paragraphs(content), target);
+    } catch (error) { errorToast(error); }
+    finally { transcribing = false; }
+    return;
+  }
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -479,24 +519,24 @@ async function dictate() {
     const recorder = new MediaRecorder(stream);
     recording = recorder;
     $('#dictate').classList.add('recording');
-    $('#dictate span:last-child').textContent = 'Stopp';
-    $('#dictate').setAttribute('aria-label', 'Diktat stoppen');
+    $('#dictate span:last-child').textContent = t("Stopp");
+    $('#dictate').setAttribute('aria-label', t("Diktat stoppen"));
     recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
     recorder.onstop = async () => {
       for (const track of stream.getTracks()) track.stop();
       recording = null;
       $('#dictate').classList.remove('recording');
-      $('#dictate span:last-child').textContent = 'Diktat';
-      $('#dictate').setAttribute('aria-label', 'Diktat starten');
+      $('#dictate span:last-child').textContent = t("Diktat");
+      $('#dictate').setAttribute('aria-label', t("Diktat starten"));
       transcribing = true;
-      toast('Das Diktat wird transkribiert …');
+      toast(t("Das Diktat wird transkribiert …"));
       try {
         const bytes = await new Blob(chunks, { type: recorder.mimeType }).arrayBuffer();
         if (!flush()) return;
         const result = await window.desk.transcribe({ bytes }, state.settings.speech);
         const content = result.segments.map(segment => segment.text).join(' ');
-        if (content) { insertContent(paragraphs(content), target); toast('Diktat eingefügt.'); }
-        else toast('Es wurde keine Sprache erkannt.');
+        if (content) { insertContent(paragraphs(content), target); toast(t("Diktat eingefügt.")); }
+        else toast(t("Es wurde keine Sprache erkannt."));
       } catch (error) { errorToast(error); }
       finally { transcribing = false; }
     };
@@ -528,9 +568,23 @@ $('#theme').onclick = () => {
   renderPreferences();
   queueSave();
 };
-$('#help').onclick = () => window.desk.help().catch(errorToast);
+$('#help').onclick = () => {
+  if (!mobile) return window.desk.help().catch(errorToast);
+  openModal(t("Hilfe"), `<p>${esc(t("Öffne die Navigation, um ein Projekt oder Kapitel auszuwählen. Über die Kapitelwerkzeuge bearbeitest du das Schreibziel und prüfst die Rechtschreibung."))}</p>
+    <p>${esc(t("Sichere dein Projekt als ZIP, um es mit Material auf ein anderes Gerät zu übertragen. Android kann die ZIP-Datei sowie eine einzelne roman.json öffnen."))}</p>
+    <p>${esc(t("Android nutzt die Diktierfunktion des Geräts. Die Transkription importierter Audio- und Videodateien sowie der vollständige Drucksatz stehen in der Desktop-App zur Verfügung."))}</p>`);
+};
 $('#export').onclick = publicationDialog;
-$('#preview').onclick = () => window.desk.publish('preview', manuscript()).catch(errorToast);
+$('#preview').onclick = () => {
+  if (!mobile) return window.desk.publish('preview', manuscript()).catch(errorToast);
+  openModal(t("Satzvorschau"), '<div class="mobile-book">' + window.desk.publicationMarkup(manuscript()) + '</div>');
+};
+window.closeScripterPanel = () => {
+  if (modal.open && !$('#confirm-modal').disabled) modal.close();
+  else if (document.body.dataset.mobilePanel) closeMobilePanels();
+  else return false;
+  return true;
+};
 $('#focus-mode').onclick = toggleFocus;
 $('#dictate').onclick = dictate;
 $('#chapter-list').addEventListener('click', event => {
@@ -561,10 +615,11 @@ document.addEventListener('click', event => {
 });
 for (const button of $$('[data-project]')) button.onclick = async () => {
   const action = button.dataset.project;
+  closeMobilePanels();
   if (action === 'meta') {
-    openModal('Projektangaben', field('Romantitel', `<input name="title" value="${esc(state.title)}" maxlength="180" required>`) + field('Autorin oder Autor', `<input name="author" value="${esc(state.author)}" maxlength="180">`) + projectFields(state), data => {
+    openModal(t("Projektangaben"), field(t("Romantitel"), `<input name="title" value="${esc(state.title)}" maxlength="180" required>`) + field(t("Autorin oder Autor"), `<input name="author" value="${esc(state.author)}" maxlength="180">`) + projectFields(state), data => {
       const title = String(data.get('title')).trim();
-      if (!title) throw new Error('Bitte gib einen Romantitel ein.');
+      if (!title) throw new Error(t("Bitte gib einen Romantitel ein."));
       state.title = title;
       state.author = String(data.get('author')).trim();
       Object.assign(state, appearance.normalizeProjectStyle(Object.fromEntries(data)));
@@ -575,35 +630,35 @@ for (const button of $$('[data-project]')) button.onclick = async () => {
     return;
   }
   if (action === 'new' || action === 'new-cloud') {
-    openModal(action === 'new-cloud' ? 'Neues Cloud-Projekt' : 'Neues Projekt',
-      field('Projekttitel', '<input name="title" maxlength="180" placeholder="Mein Roman" autofocus>') + projectFields(),
+    openModal(action === 'new-cloud' ? t("Neues Cloud-Projekt") : t("Neues Projekt"),
+      field(t("Projekttitel"), ("<input name=\"title\" maxlength=\"180\" placeholder=\"" + esc(t("Mein Roman")) + "\" autofocus>")) + projectFields(),
       async data => {
         const details = Object.fromEntries(data);
         modal.close();
         await runProjectAction(action, false, details);
         return false;
-      }, 'Speicherort wählen');
+      }, mobile ? t("Anlegen") : t("Speicherort wählen"));
     bindProjectFields();
     return;
   }
   await runProjectAction(action);
 };
 async function runProjectAction(action, discard = false, details) {
-  if (projectDialogBusy || imports || recording || transcribing) return toast('Beende zuerst die laufende Projektaktion.');
+  if (projectDialogBusy || imports || recording || transcribing) return toast(t("Beende zuerst die laufende Projektaktion."));
   const copy = ['backup', 'copy-cloud'].includes(action);
   if (!copy && !discard && !flush()) {
-    openModal('Projekt wechseln?', '<p>Der aktuelle Arbeitsstand konnte nicht gespeichert werden. Sichere ihn im Projektmenü als Kopie, wenn du ihn behalten willst.</p>', async () => {
+    openModal(t("Projekt wechseln?"), ("<p>" + esc(t("Der aktuelle Arbeitsstand konnte nicht gespeichert werden. Sichere ihn im Projektmenü als Kopie, wenn du ihn behalten willst.")) + "</p>"), async () => {
       modal.close();
       await runProjectAction(action, true, details);
       return false;
-    }, 'Trotzdem wechseln');
+    }, t("Trotzdem wechseln"));
     return;
   }
   projectDialogBusy = true;
   try {
     if (copy) {
       if (await window.desk.backup(state, action === 'copy-cloud')) {
-        toast(action === 'copy-cloud' ? 'Cloud-Kopie gespeichert. Öffne sie über „Cloud-Projekt öffnen“.' : 'Projektsicherung gespeichert.');
+        toast(action === 'copy-cloud' ? t("Cloud-Kopie gespeichert. Öffne sie über „Cloud-Projekt öffnen“.") : t("Projektsicherung gespeichert."));
       }
     } else {
       const method = action.startsWith('new') ? 'newProject' : 'openProject';
@@ -624,7 +679,7 @@ $('#intent').addEventListener('input', event => {
 });
 $('#edit-goal').onclick = () => {
   const item = chapter();
-  openModal('Kapitelziel bearbeiten', field('Wortziel (0 für kein Ziel)', `<input name="goal" type="number" value="${Number(item.goal) || 0}" min="0" max="1000000" required>`), data => {
+  openModal(t("Kapitelziel bearbeiten"), field(t("Wortziel (0 für kein Ziel)"), `<input name="goal" type="number" value="${Number(item.goal) || 0}" min="0" max="1000000" required>`), data => {
     item.goal = Number(data.get('goal'));
     refreshMetrics();
     queueSave();
@@ -649,10 +704,27 @@ for (const button of $$('[data-command]')) {
   button.onclick = () => runEdit(button.dataset.command);
 }
 $('#block').onchange = event => runEdit('formatBlock', event.target.value);
-for (const select of [$('#dictionary-language'), $('#spell-language')]) select.innerHTML = Object.entries(langs).map(([code,label]) => option(code,label)).join('');
+function applyInterfaceLanguage(language) {
+  translateInterface(language);
+  for (const select of [$('#dictionary-language'), $('#spell-language')]) {
+    const previous = select.value || state?.settings.lang;
+    select.innerHTML = Object.entries(langs).map(([code, label]) => option(code, t(label), previous)).join('');
+  }
+  if (currentWindowStatus) updateWindowControls(currentWindowStatus);
+  if (!state) return;
+  renderProject();
+  renderChapters();
+  $('#chapter-number').textContent = t("Kapitel") + ' ' + String(state.chapters.indexOf(chapter()) + 1).padStart(2, '0');
+  renderMaterials();
+  $('#synonyms').replaceChildren();
+  $('#spell-result').replaceChildren();
+  lookupRequest++;
+  spellRequest++;
+  showView(view);
+}
 $('#use-selection').onclick = () => {
   const text = (selection?.text || '').trim();
-  if (!text) return toast('Markiere zuerst ein Wort im Manuskript.');
+  if (!text) return toast(t("Markiere zuerst ein Wort im Manuskript."));
   $('#lookup-word').value = text.slice(0,60);
   $('#lookup').requestSubmit();
 };
@@ -669,9 +741,9 @@ $('#lookup').onsubmit = async event => {
     for (const [label, ...values] of groups.slice(0, 10)) {
       const choices = [...new Set(values.map(value => value.trim()).filter(value => !/\(antonym\)/i.test(value)).map(value => value.replace(/\s*\((?:similar term|related term|synonym|Hauptform)\)\s*$/i, '')).filter(value => value && value.toLowerCase() !== word.toLowerCase()))].slice(0, 18);
       if (!choices.length) continue;
-      html += `<div class="sense">${label.trim() !== '-' ? '<strong>' + esc(label) + '</strong>' : ''}${choices.map(value => `<button type="button" data-synonym="${esc(value)}" title="Einfügen oder kopieren">${esc(value)}</button>`).join('')}</div>`;
+      html += `<div class="sense">${label.trim() !== '-' ? '<strong>' + esc(label) + '</strong>' : ''}${choices.map(value => `<button type="button" data-synonym="${esc(value)}" title="${esc(t("Einfügen oder kopieren"))}">${esc(value)}</button>`).join('')}</div>`;
     }
-    $('#synonyms').innerHTML = html || 'Kein Eintrag gefunden. Versuche die Grundform des Wortes.';
+    $('#synonyms').innerHTML = html || t("Kein Eintrag gefunden. Versuche die Grundform des Wortes.");
   } catch (error) { errorToast(error); }
 };
 $('#synonyms').onclick = async event => {
@@ -681,7 +753,7 @@ $('#synonyms').onclick = async event => {
   if (selection?.chapter === chapter().id && selected && selected.toLowerCase() === $('#lookup-word').value.trim().toLowerCase()) {
     runEdit('insertText', value);
   } else {
-    try { await window.desk.copy(value); toast('In die Zwischenablage kopiert.'); }
+    try { await window.desk.copy(value); toast(t("In die Zwischenablage kopiert.")); }
     catch (error) { errorToast(error); }
   }
 };
@@ -696,11 +768,11 @@ $('#spell-language').onchange = async event => {
 $('#check-spelling').onclick = async () => {
   const currentRequest = ++spellRequest;
   const candidates = [...new Set(words(editor.innerText).filter(word => /\p{L}/u.test(word)))];
-  $('#spell-result').textContent = 'Prüft …';
+  $('#spell-result').textContent = t("Prüft …");
   try {
     const suspect = await window.desk.spell(candidates, state.settings.lang);
     if (currentRequest !== spellRequest) return;
-    $('#spell-result').innerHTML = suspect.length ? suspect.map(word => `<button class="spell-word" data-spell="${esc(word)}" type="button">${esc(word)}</button>`).join('') : 'Keine auffälligen Wörter gefunden.';
+    $('#spell-result').innerHTML = suspect.length ? suspect.map(word => `<button class="spell-word" data-spell="${esc(word)}" type="button">${esc(word)}</button>`).join('') : t("Keine auffälligen Wörter gefunden.");
   } catch (error) { errorToast(error); $('#spell-result').replaceChildren(); }
 };
 $('#spell-result').onclick = async event => {
@@ -724,24 +796,28 @@ $('#spell-result').onclick = async event => {
       if (!corrections.length) return;
       if (selection?.text === term) {
         const target = selection;
-        openModal('Rechtschreibung', field('Vorschlag für „' + term + '“', '<select name="replacement">' + corrections.map(value => option(value,value)).join('') + '</select>'), data => {
+        openModal(t("Rechtschreibung"), field(t("Vorschlag für „{word}“", { word: term }), '<select name="replacement">' + corrections.map(value => option(value,value)).join('') + '</select>'), data => {
           modal.close();
           selection = target;
           runEdit('insertText', data.get('replacement'));
-        }, 'Ersetzen');
+        }, t("Ersetzen"));
       }
     } catch (error) { errorToast(error); }
     break;
   }
 };
 $('#pick-files').onclick = async () => {
+  if (projectDialogBusy || imports) return;
+  imports++;
   try { await importFiles(await window.desk.pick()); }
   catch (error) { errorToast(error); }
+  finally { imports--; }
 };
-$('#add-url').onclick = () => openModal('Weblink hinzufügen', field('Webadresse', '<input name="url" type="url" placeholder="https://…" required autofocus>'), async data => {
+$('#add-url').onclick = () => openModal(t("Weblink hinzufügen"), field(t("Webadresse"), '<input name="url" type="url" placeholder="https://…" required autofocus>'), async data => {
   state.assets = await window.desk.addLink(data.get('url'));
+  if (mobile) { queueSave(); flush(); }
   renderMaterials();
-}, 'Hinzufügen');
+}, t("Hinzufügen"));
 $('#material-list').onclick = async event => {
   const action = event.target.closest('[data-asset]')?.dataset.asset;
   if (!action) return;
@@ -754,19 +830,20 @@ $('#material-list').onclick = async event => {
       const value = await window.desk.insertAsset(id);
       const html = { text: () => paragraphs(value.value), html: () => value.value, image: () => `<p><img src="${esc(value.url)}" alt="${esc(value.name)}"></p>`, link: () => `<p><a href="${esc(value.url)}">${esc(value.name)}</a></p>` }[value.type]();
       if (html.trim()) insertContent(html, target);
-      else toast('Das Material enthält keinen einfügbaren Text.');
+      else toast(t("Das Material enthält keinen einfügbaren Text."));
     }
     if (action === 'delete') {
-      openModal('Material entfernen?', `<p>„${esc(item.name)}“ wird aus dem Projektordner entfernt.</p>`, async () => {
+      openModal(t("Material entfernen?"), `<p>${esc(t("„{file}“ wird aus dem Projektordner entfernt.", { file: item.name }))}</p>`, async () => {
         state.assets = await window.desk.removeAsset(id);
+        if (mobile) { queueSave(); flush(); }
         renderMaterials();
-      }, 'Entfernen');
+      }, t("Entfernen"));
     }
     if (action === 'transcript') showTranscript(item.transcript, item.name, target, id);
     if (action === 'transcribe') {
-      if (transcribing || recording) return toast('Eine Sprachaufgabe läuft bereits.');
+      if (transcribing || recording) return toast(t("Eine Sprachaufgabe läuft bereits."));
       transcribing = true;
-      toast('Die Datei wird transkribiert …');
+      toast(t("Die Datei wird transkribiert …"));
       try {
         if (!flush()) return;
         const result = await window.desk.transcribe(id, state.settings.speech);
@@ -805,21 +882,23 @@ document.addEventListener('drop', event => {
   const urls = event.dataTransfer.getData('text/uri-list').split(/\r?\n/).map(value => value.trim()).filter(value => /^https?:\/\//i.test(value));
   if (!projectDialogBusy) importFiles(files, urls);
 });
+document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
 window.addEventListener('beforeunload', event => {
   if (!flush()) { event.preventDefault(); event.returnValue = false; }
 });
 document.addEventListener('keydown', event => {
   if (!state || modal.open) return;
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); if (flush()) toast('Projekt gespeichert.'); }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); if (flush()) toast(t("Projekt gespeichert.")); }
   if (event.key === 'Escape' && document.body.classList.contains('focus')) toggleFocus();
 });
 decorate();
 Promise.all([window.desk.get(), window.desk.locations()]).then(([project, locations]) => {
   readingAccess = appearance.normalizeAccess(locations.access);
+  applyInterfaceLanguage(locations.uiLanguage);
   startProject(project);
 }).catch(errorToast);
 window.desk.unavailableProject().then(path => {
-  if (path) toast('Das letzte Projekt ist derzeit nicht verfügbar. Öffne es erneut, sobald der Ordner erreichbar ist.\n' + path, true);
+  if (path) toast(t("Das letzte Projekt ist derzeit nicht verfügbar. Öffne es erneut, sobald der Ordner erreichbar ist.\n") + path, true);
 }).catch(errorToast);
 for (const button of $$('[data-window-action]')) {
   button.onclick = () => window.desk.windowControl(button.dataset.windowAction).then(updateWindowControls).catch(errorToast);

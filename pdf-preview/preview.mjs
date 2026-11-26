@@ -34,7 +34,7 @@ async function renderPage(number, size) {
   canvas.width = Math.round(viewport.width * ratio);
   canvas.height = Math.round(viewport.height * ratio);
   canvas.dataset.page = number;
-  canvas.setAttribute('aria-label', 'Druckseite ' + number);
+  canvas.setAttribute('aria-label', t("Druckseite {number}", { number }));
   await page.render({ canvas, viewport, transform: [ratio, 0, 0, ratio, 0, 0] }).promise;
   return canvas;
 }
@@ -93,12 +93,12 @@ async function showSpread(requested, animate = true) {
       right.replaceChildren(nextRight);
       current = { spread, size };
       const pages = [spread, spread + 1].filter(number => number > 0 && number <= pdf.numPages);
-      get('current-spread').textContent = 'Druckseiten ' + pages.join(' und ') + ' von ' + pdf.numPages;
+      get('current-spread').textContent = t("Druckseiten {pages} von {total}", { pages: new Intl.ListFormat(document.documentElement.lang).format(pages.map(String)), total: pdf.numPages });
       status.hidden = true;
     }
   } catch (error) {
     status.hidden = false;
-    status.textContent = 'Die Seite konnte nicht dargestellt werden. ' + error.message;
+    status.textContent = t("Die Seite konnte nicht dargestellt werden.") + ' ' + error.message;
   } finally {
     painting = false;
     updateControls();
@@ -122,7 +122,7 @@ function updateWindowControls(status) {
   controls.hidden = !status.linuxControls;
   document.body.classList.toggle('custom-window', status.linuxControls);
   const maximize = controls.querySelector('[data-action="toggle-maximize"]');
-  const label = status.maximized ? 'Fenster wiederherstellen' : 'Fenster maximieren';
+  const label = status.maximized ? t("Fenster wiederherstellen") : t("Fenster maximieren");
   maximize.textContent = status.maximized ? '❐' : '□';
   maximize.setAttribute('aria-label', label);
   maximize.title = label;
@@ -148,5 +148,5 @@ try {
   await showSpread(1, false);
   new ResizeObserver(() => showSpread(requestedPage, false)).observe(reader);
 } catch (error) {
-  status.textContent = 'Das PDF konnte nicht geladen werden. ' + error.message;
+  status.textContent = t("Das PDF konnte nicht geladen werden.") + ' ' + error.message;
 }

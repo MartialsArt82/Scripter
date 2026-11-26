@@ -1,6 +1,12 @@
-# Scripter 1.3.1
+# Scripter 1.4
 
-Lokale Desktop-App für Romanprojekte unter Windows, macOS und Linux. Windows x64, macOS (Apple Silicon und Intel) sowie Fedora/Nobara x64 werden als portable Pakete angeboten.
+Lokale Schreib-App für Romanprojekte unter Windows, macOS, Linux und Android. Installationspakete für Debian/Ubuntu (DEB), Fedora/Nobara (RPM) und Android (APK) sowie portable Desktop-Pakete stehen unter [Releases](https://github.com/MartialsArt82/Scripter/releases).
+
+Die Oberflächensprache lässt sich in den Einstellungen auf Deutsch, Englisch, Französisch, Spanisch oder Portugiesisch umstellen. Rechtschreibprüfung und Wortschatz verwenden weiterhin ihre eigenen Sprachauswahlen.
+
+**English below**
+
+Scripter is a local writing app for Windows, macOS, Linux and Android. [Releases](https://github.com/MartialsArt82/Scripter/releases) provide the Debian/Ubuntu DEB, Fedora/Nobara RPM, Android APK and portable desktop downloads. The interface language is available in German, English, French, Spanish and Portuguese.
 
 ## Starten aus dem Quellcode
 
@@ -26,13 +32,26 @@ Benötigt werden im Runtime-Ordner die Plattformarchive `<ziel>.zip` für Electr
 
 ## GitHub-Release
 
-Der Workflow auf `codex/scripter-release-1.3.1` baut die vier portablen Pakete und das Fedora/Nobara-RPM und hängt sie mit Quellcode und Prüfsummen an den Release-Entwurf `v1.3.1`. Nach dem Abgleich der SHA-256-Prüfsummen veröffentlicht er das Release im privaten Repository.
+Der Workflow auf `codex/scripter-release-1.4` baut vier portable Pakete, das Fedora/Nobara-RPM, das Debian-Paket und die Android-App. Nach der APK-Signaturprüfung und dem Abgleich der SHA-256-Prüfsummen veröffentlicht er die Dateien unter **Assets**.
 
-`bash tools/release-build.sh /absoluter/ausgabeordner` führt denselben Build unter Linux x64 mit `rpmbuild`, `rpm` und `desktop-file-validate` aus. Das Skript lädt die geprüften Electron-, Pandoc- und Signierwerkzeuge bei Bedarf herunter.
+`bash tools/release-build.sh /absoluter/ausgabeordner` führt denselben Build unter Linux x64 mit `rpmbuild`, `rpm`, `desktop-file-validate`, `dpkg-deb`, JDK 17 und Android SDK 35 aus. Das Skript lädt die geprüften Electron-, Pandoc- und Signierwerkzeuge bei Bedarf herunter.
+
+## Android-Paket bauen
+
+Benötigt werden Node.js, JDK 17, die SDK-Plattform `android-35` und die Build-Tools `35.0.0`. Setze `ANDROID_HOME` auf den SDK-Ordner.
+
+```sh
+ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci
+bash tools/android-build.sh /pfad/zu/Scripter-unsigned.apk
+```
+
+Zum Signieren dient `tools/android-sign.sh` mit einem PKCS#12-Keystore (Alias `scripter`) und den Umgebungsvariablen `SCRIPTER_ANDROID_KEYSTORE` und `SCRIPTER_ANDROID_KEY_PASSWORD`. Der Release-Workflow akzeptiert die Actions-Secrets `SCRIPTER_ANDROID_KEYSTORE_B64` und `SCRIPTER_ANDROID_KEY_PASSWORD` oder eine bereits lokal signierte APK aus `codex/scripter-apk-<version>`. Vor Veröffentlichung prüft er das Zertifikat und vergleicht den APK-Inhalt mit dem frischen Quellcode-Build. Für Updates muss dasselbe Zertifikat verwendet werden.
+
+Android verwendet den System-Dateidialog für Material, Projekt-ZIPs und Exporte. PDF läuft über den Android-Druckdialog. Buchsatz mit animierter Doppelseite, Transkripte aus Audio- und Videodateien und die erweiterten Exportformate sind Desktop-Funktionen.
 
 ## Projektdaten
 
-Ein Projekt besteht aus einer JSON-Datei und dem Unterordner `Material`. Das Manuskript verwendet formatiertes HTML. Die App öffnet beim ersten Start ein fiktives Beispielprojekt. Dateien und Transkripte werden lokal abgelegt. Eine Projektsicherung schließt die Materialdateien ein.
+Ein Projekt besteht aus einer JSON-Datei und dem Unterordner `Material`. Das Manuskript verwendet formatiertes HTML. Die Desktop-App öffnet beim ersten Start ein fiktives Beispielprojekt. Android legt ein leeres Projekt an. Dateien und Transkripte werden lokal abgelegt. Eine Projektsicherung schließt die Materialdateien ein. Android sichert als ZIP mit `roman.json` und `Material`. Für den Wechsel von Desktop zu Android kann derselbe Aufbau als ZIP gepackt werden. Die Datei `roman.json` kann auch einzeln geöffnet werden.
 
 Die Bedienung, Installation der Spracherkennung, optionalen Systemprogramme und Exportgrenzen stehen in `hilfe.html` und `STARTEN.txt`.
 

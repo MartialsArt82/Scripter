@@ -1,0 +1,48 @@
+.mobile-app{display:block;height:100dvh;min-width:0}
+.mobile-app .workspace{height:100%;grid-template-rows:56px minmax(0,1fr) auto}
+.mobile-app .topbar{padding:0 8px;gap:5px}
+.mobile-app .crumb{flex:1;overflow:hidden}
+.mobile-app .crumb strong,.mobile-app .crumb>[data-icon],.mobile-app .topbar .saved{display:none}
+.mobile-app .top-actions{gap:2px}
+.mobile-app .top-actions .primary{padding-inline:9px}
+.mobile-app .top-actions .primary .svg-icon{display:none}
+.mobile-app .topbar button{min-width:44px;min-height:44px}
+.mobile-app .topbar .icon-button{display:grid;place-items:center}
+.mobile-app .sidebar,.mobile-app .inspector{
+  display:none;position:fixed;inset:0 auto 0 0;z-index:5;
+  width:min(86vw,320px);overflow:auto;overscroll-behavior:contain;padding-bottom:20px
+}
+.mobile-app .inspector{inset:0 0 0 auto;width:min(90vw,350px)}
+.mobile-app[data-mobile-panel=navigation] .sidebar,.mobile-app[data-mobile-panel=tools] .inspector{display:flex}
+#mobile-scrim{position:fixed;inset:0;background:#0007;z-index:4}
+.mobile-app .sidebar button,.mobile-app .inspector button{min-height:44px}
+.mobile-app [data-project$="-cloud"],.mobile-app .project-menu-divider,.mobile-app #status-zoom{display:none}
+.mobile-app .editor-view{grid-template-columns:minmax(0,1fr)}
+.mobile-app .editor-zone{padding:16px 10px 24px}
+.mobile-app .chapter-heading{margin-bottom:12px}
+.mobile-app .chapter-title{font-size:clamp(26px,8vw,42px)}
+.mobile-app .toolbar{padding:2px 5px;gap:1px}
+.mobile-app .toolbar button{min-width:40px;height:42px}
+.mobile-app .toolbar .separator{display:none}
+.mobile-app #manuscript{padding:18px 14px 42px}
+.mobile-app .statusbar{padding:3px 10px;min-height:25px}
+.mobile-app .page-view{padding:14px 10px}
+.mobile-app .page-heading{align-items:flex-start;flex-direction:column;margin-bottom:14px}
+.mobile-app .page-heading h1{font-size:30px}
+.mobile-app .page-heading button,.mobile-app .storyboard-toolbar button,.mobile-app .note-grip,.mobile-app .note-port{min-height:44px}
+.mobile-app .layout-body{display:grid;grid-template-columns:minmax(0,1fr)}
+.mobile-app .layout-preview{display:none}
+.mobile-app .asset{display:flex;flex-wrap:wrap}
+.mobile-app .asset-info{min-width:40%;flex:1}
+.mobile-app .asset button{min-height:44px}
+.mobile-app #modal{width:min(100% - 16px,540px);max-height:calc(100dvh - 20px)}
+.mobile-app .modal-actions button{min-height:44px}
+.mobile-app .export-grid{grid-template-columns:1fr}
+.mobile-app .timeline-note{padding-right:54px;position:relative}
+.timeline-touch-order{position:absolute;right:6px;top:4px;display:grid}
+.timeline-touch-order button{min-width:44px;min-height:44px}
+.mobile-book{font-family:var(--manuscript-font,Georgia);overflow-wrap:anywhere}
+.mobile-book img{max-width:100%;height:auto}
+.mobile-book section{border-top:1px solid var(--line);margin-top:16px}
+.mobile-project-list{display:grid;gap:8px}
+.mobile-project-list button{min-height:44px;white-space:normal;overflow-wrap:anywhere}
