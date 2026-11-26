@@ -27,14 +27,15 @@ jobs:
       - name: Debian- und RPM-Werkzeuge installieren
         run: sudo apt-get update -qq && sudo apt-get install -y dpkg-dev rpm desktop-file-utils
       - name: Android SDK vorbereiten
-        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+        run: bash tools/install-android-sdk.sh "$RUNNER_TEMP/scripter-android"
       - name: Desktop- und Android-Pakete bauen und prüfen
         env:
           GH_TOKEN: ${{ github.token }}
           SCRIPTER_ANDROID_KEYSTORE_B64: ${{ secrets.SCRIPTER_ANDROID_KEYSTORE_B64 }}
           SCRIPTER_ANDROID_KEY_PASSWORD: ${{ secrets.SCRIPTER_ANDROID_KEY_PASSWORD }}
         run: |
-          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export JAVA_HOME="$RUNNER_TEMP/scripter-android/jdk"
+          export ANDROID_HOME="$RUNNER_TEMP/scripter-android/sdk"
           export PATH="$JAVA_HOME/bin:$PATH"
           bash tools/release-build.sh "$RUNNER_TEMP/scripter-release"
       - name: Pakete hochladen und Release veröffentlichen
