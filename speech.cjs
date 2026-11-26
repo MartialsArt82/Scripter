@@ -42,4 +42,5 @@ function applySpeechRules(transcript, rules) {
   };
 }
 
-module.exports = { normalizeSpeechRules, voiceHints, applySpeechRules };
+const speechRules = { normalizeSpeechRules, voiceHints, applySpeechRules };
+if (typeof module !== 'undefined') module.exports = speechRules;

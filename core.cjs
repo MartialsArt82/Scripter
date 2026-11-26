@@ -1,5 +1,5 @@
 const { normalizeProjectStyle, fontStack } = require('./appearance.js');
-const { normalizeSpeechRules } = require('./speech.cjs');
+const { validProject } = require('./project-validation.js');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -8,8 +8,8 @@ const locales = { de: 'de-DE', en: 'en-US', es: 'es-ES', pt: 'pt-PT', fr: 'fr-FR
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const chapter = (title = 'Neues Kapitel') => ({ id: crypto.randomUUID(), title, goal: 1500, intent: '', html: '' });
 const defaults = { theme: 'light', font: 'Georgia', zoom: 100, lang: 'de', speech: 'auto', trim: 'trade', margins: 19, size: 11, leading: 1.5, pageNumbers: true };
-function project(title, demo = false, style) {
-  const first = chapter(demo ? 'Der Brief' : 'Kapitel 1');
+function project(title, demo = false, style, firstTitle = 'Kapitel 1') {
+  const first = chapter(demo ? 'Der Brief' : firstTitle);
   if (demo) {
     first.goal = 1200;
     first.intent = 'Clara findet den Brief. Der erste Hinweis führt zum Bahnhof.';
@@ -25,32 +25,6 @@ function atomic(filename, value) {
   } finally {
     fs.rmSync(temp, { force: true });
   }
-}
-function validProject(value) {
-  if (value?.version !== 1 || !Array.isArray(value.chapters) || !value.chapters.length || !Array.isArray(value.assets)) throw new Error('Diese Datei ist kein Scripter-Projekt.');
-  Object.assign(value, normalizeProjectStyle(value));
-  const chapters = new Set(value.chapters.map(chapter => chapter.id));
-  const position = number => Math.round(Math.max(0, Math.min(100000, Number(number) || 0)));
-  value.storyboard = (Array.isArray(value.storyboard) ? value.storyboard : []).filter(note => typeof note?.id === 'string').map(note => ({
-    id: note.id,
-    title: String(note.title ?? '').slice(0, 100),
-    body: String(note.body ?? '').slice(0, 2000),
-    when: String(note.when ?? '').slice(0, 80),
-    order: Math.min(99999, Math.max(1, Math.round(Number(note.order) || 1))),
-    color: ['sand', 'sage', 'rose', 'blue'].includes(note.color) ? note.color : 'sand',
-    x: position(note.x),
-    y: position(note.y),
-    chapters: [...new Set(Array.isArray(note.chapters) ? note.chapters.filter(id => chapters.has(id)) : [])]
-  }));
-  const notes = new Set(value.storyboard.map(note => note.id));
-  const existingLinks = new Set();
-  value.storyLinks = (Array.isArray(value.storyLinks) ? value.storyLinks : []).flatMap(link => {
-    if (typeof link?.id !== 'string' || existingLinks.has(link.id) || link.from === link.to || !notes.has(link.from) || !notes.has(link.to)) return [];
-    existingLinks.add(link.id);
-    return [{ id: link.id, from: link.from, to: link.to, color: ['green','blue','red','gold'].includes(link.color) ? link.color : 'green' }];
-  });
-  value.speechRules = normalizeSpeechRules(value.speechRules);
-  return value;
 }
 const trims = { trade: [135, 215], pocket: [120, 190], a5: [148, 210], a4: [210, 297], us: [152.4, 228.6] };
 let courierStyle;

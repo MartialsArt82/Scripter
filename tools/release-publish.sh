@@ -7,8 +7,8 @@ output=${1:?Ausgabeordner fehlt}
 version=$(node -p "require('./package.json').version")
 tag="v$version"
 
-if [[ $(gh api "repos/$repo" --jq '.private') != true ]]; then
-  echo 'Die Freigabe gilt für ein privates Repository.' >&2
+if [[ $(gh api "repos/$repo" --jq '.id') != 1463949073 ]]; then
+  echo 'Unerwartetes Release-Repository.' >&2
   exit 1
 fi
 if ! release_url=$(gh release view "$tag" --repo "$repo" --json apiUrl --jq .apiUrl); then
@@ -23,12 +23,14 @@ if [[ $(gh api "repos/$repo/releases/$release_id" --jq '.draft') != true ]]; the
 fi
 
 cd "$output"
-sha256sum --check SHA256SUMS.txt
-gh release upload "$tag" --repo "$repo" --clobber "Scripter-$version-"*.zip "Scripter-$version-Fedora-Nobara-x64.tar.gz" "scripter-$version-1.x86_64.rpm" STARTEN.txt SHA256SUMS.txt
+sha256sum --check --strict SHA256SUMS.txt
+assets=("Scripter-$version-"*.zip "Scripter-$version-Fedora-Nobara-x64.tar.gz" "scripter-$version-1.x86_64.rpm"
+  "scripter_${version}_amd64.deb" "Scripter-$version-Android.apk" STARTEN.txt SHA256SUMS.txt)
+gh release upload "$tag" --repo "$repo" --clobber "${assets[@]}"
 
 local_assets=$(mktemp)
 trap 'rm -f -- "$local_assets"' EXIT
-sha256sum "Scripter-$version-"*.zip "Scripter-$version-Fedora-Nobara-x64.tar.gz" "scripter-$version-1.x86_64.rpm" STARTEN.txt SHA256SUMS.txt | sort > "$local_assets"
+sha256sum "${assets[@]}" | sort > "$local_assets"
 remote_assets=$(gh api "repos/$repo/releases/$release_id/assets" --paginate --jq '.[] | select(.state == "uploaded") | "\(.digest | sub("^sha256:"; ""))  \(.name)"' | sort)
 diff -u "$local_assets" <(printf '%s\n' "$remote_assets")
 

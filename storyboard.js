@@ -15,7 +15,7 @@ const notePosition = value => Math.round(Math.max(0, Math.min(100000, value)));
 
 function chapterLinks(note) {
   return note.chapters.map(id => state.chapters.find(item => item.id === id)).filter(Boolean)
-    .map(item => `<button type="button" class="chapter-chip" data-open-chapter="${esc(item.id)}">${esc(item.title || 'Ohne Titel')}</button>`).join('');
+    .map(item => `<button type="button" class="chapter-chip" data-open-chapter="${esc(item.id)}">${esc(item.title || t("Ohne Titel"))}</button>`).join('');
 }
 
 function noteFields(note) {
@@ -34,20 +34,23 @@ function renderStoryboard() {
   $('#board-instruction').hidden = timeline;
   if (timeline) cancelLink();
   for (const button of $$('[data-board-mode]')) button.setAttribute('aria-pressed', String(button.dataset.boardMode === boardMode));
-  $('#board-chapters').innerHTML = state.chapters.map((item, index) => `<button type="button" class="board-chapter" data-open-chapter="${esc(item.id)}"><span>${index + 1}</span>${esc(item.title || 'Ohne Titel')}</button>`).join('');
+  $('#board-chapters').innerHTML = state.chapters.map((item, index) => `<button type="button" class="board-chapter" data-open-chapter="${esc(item.id)}"><span>${index + 1}</span>${esc(item.title || t("Ohne Titel"))}</button>`).join('');
   $('#board-notes').innerHTML = notes.map(note =>
     `<article class="sticky-note" data-note-id="${esc(note.id)}" data-tone="${note.color}" style="left:${boardOffset.x + note.x}px;top:${boardOffset.y + note.y}px">
-      <button type="button" class="note-grip icon-button" data-note-grip title="Ziehen oder mit den Pfeiltasten verschieben" aria-label="${esc(note.title)} verschieben" data-icon="grip"></button>
-      <button type="button" class="note-port icon-button" data-note-port draggable="true" title="Verbindung ziehen oder Start- und Zielzettel anklicken" aria-label="${esc(note.title)} verbinden" data-icon="link"></button>
+      <button type="button" class="note-grip icon-button" data-note-grip title="${esc(t("Ziehen oder mit den Pfeiltasten verschieben"))}" aria-label="${esc(t("„{title}“ verschieben", { title: note.title }))}" data-icon="grip"></button>
+      <button type="button" class="note-port icon-button" data-note-port draggable="true" title="${esc(t("Verbindung ziehen oder Start- und Zielzettel anklicken"))}" aria-label="${esc(t("„{title}“ verbinden", { title: note.title }))}" data-icon="link"></button>
       ${noteFields(note)}
     </article>`
   ).join('');
   $('#board-empty').hidden = Boolean(notes.length);
   timelinePanel.innerHTML = notes.length
     ? timelineNotes().map(note => `<article class="timeline-note" data-timeline-id="${esc(note.id)}" data-tone="${note.color}">
-      <button type="button" class="timeline-grip icon-button" draggable="true" data-timeline-grip aria-label="${esc(note.title)} in der Zeitleiste verschieben" title="Ziehen oder Pfeiltasten benutzen" data-icon="grip"></button>
-      ${noteFields(note)}</article>`).join('')
-    : '<p class="timeline-empty">Erstelle einen Zettel, um deine Zeitleiste zu beginnen.</p>';
+      <button type="button" class="timeline-grip icon-button" draggable="true" data-timeline-grip aria-label="${esc(t("„{title}“ in der Zeitleiste verschieben", { title: note.title }))}" title="${esc(t("Ziehen oder Pfeiltasten benutzen"))}" data-icon="grip"></button>
+      ${noteFields(note)}
+      ${mobile ? `<div class="timeline-touch-order">
+        <button type="button" class="icon-button" data-timeline-move="-1" aria-label="${esc(t("Nach oben"))}" >↑</button>
+        <button type="button" class="icon-button" data-timeline-move="1" aria-label="${esc(t("Nach unten"))}" >↓</button></div>` : ''}</article>`).join('')
+    : ("<p class=\"timeline-empty\">" + esc(t("Erstelle einen Zettel, um deine Zeitleiste zu beginnen.")) + "</p>");
   decorate($('#storyboard-view'));
   updateLinkStatus();
   if (!timeline) {
@@ -120,20 +123,20 @@ function requestBoardLines() {
 function editStoryboardNote(existing) {
   const notes = state.storyboard;
   const order = existing?.order ?? Math.min(99999, Math.max(0, ...notes.map(note => note.order)) + 1);
-  const chapterOptions = state.chapters.map((item, index) => `<label><input type="checkbox" name="chapters" value="${esc(item.id)}" ${existing?.chapters.includes(item.id) ? 'checked' : ''}> <span>${index + 1}. ${esc(item.title || 'Ohne Titel')}</span></label>`).join('');
+  const chapterOptions = state.chapters.map((item, index) => `<label><input type="checkbox" name="chapters" value="${esc(item.id)}" ${existing?.chapters.includes(item.id) ? 'checked' : ''}> <span>${index + 1}. ${esc(item.title || t("Ohne Titel"))}</span></label>`).join('');
   const form = [
-    field('Titel', `<input name="title" required maxlength="100" value="${esc(existing?.title)}" autofocus>`),
-    '<div class="note-form-row">' + field('Zeitleistenposition', `<input name="order" required type="number" min="1" max="99999" value="${order}">`)
-      + field('Zeitpunkt (optional)', `<input name="when" maxlength="80" placeholder="Tag 3 · abends" value="${esc(existing?.when)}">`) + '</div>',
-    field('Notiz', `<textarea name="body" rows="4" maxlength="2000">${esc(existing?.body)}</textarea>`),
-    field('Farbe', `<select name="color">${Object.entries(noteColors).map(([key, label]) => option(key, label, existing?.color ?? 'sand')).join('')}</select>`),
-    `<fieldset class="note-chapter-picker"><legend>Mit Kapiteln verknüpfen</legend><div>${chapterOptions}</div></fieldset>`,
+    field(t("Titel"), `<input name="title" required maxlength="100" value="${esc(existing?.title)}" autofocus>`),
+    '<div class="note-form-row">' + field(t("Zeitleistenposition"), `<input name="order" required type="number" min="1" max="99999" value="${order}">`)
+      + field(t("Zeitpunkt (optional)"), `<input name="when" maxlength="80" placeholder="${esc(t("Tag 3 · abends"))}" value="${esc(existing?.when)}">`) + '</div>',
+    field(t("Notiz"), `<textarea name="body" rows="4" maxlength="2000">${esc(existing?.body)}</textarea>`),
+    field(t("Farbe"), `<select name="color">${Object.entries(noteColors).map(([key, label]) => option(key, t(label), existing?.color ?? 'sand')).join('')}</select>`),
+    `<fieldset class="note-chapter-picker"><legend>${esc(t("Mit Kapiteln verknüpfen"))}</legend><div>${chapterOptions}</div></fieldset>`,
     existing ? noteLinks(existing.id) : '',
-    existing ? '<button type="button" id="delete-story-note" class="text-button">Zettel löschen</button>' : ''
+    existing ? ("<button type=\"button\" id=\"delete-story-note\" class=\"text-button\">" + esc(t("Zettel löschen")) + "</button>") : ''
   ].join('');
-  openModal(existing ? 'Zettel bearbeiten' : 'Zettel hinzufügen', form, data => {
+  openModal(existing ? t("Zettel bearbeiten") : t("Zettel hinzufügen"), form, data => {
     const title = String(data.get('title')).trim();
-    if (!title) throw new Error('Gib dem Zettel einen Titel.');
+    if (!title) throw new Error(t("Gib dem Zettel einen Titel."));
     const note = existing ?? { id: crypto.randomUUID(), x: 0, y: 0 };
     Object.assign(note, {
       title, body: String(data.get('body')).trim(), when: String(data.get('when')).trim(),
@@ -163,12 +166,12 @@ function editStoryboardNote(existing) {
     button.onclick = () => editStoryLink(button.dataset.editStoryLink);
   }
   if (existing) $('#delete-story-note').onclick = () => {
-    openModal('Zettel löschen?', `<p>„${esc(existing.title)}“ wird von der Pinnwand und der Zeitleiste entfernt.</p>`, () => {
+    openModal(t("Zettel löschen?"), `<p>${esc(t("„{title}“ wird von der Pinnwand und der Zeitleiste entfernt.", { title: existing.title }))}</p>`, () => {
       state.storyboard = state.storyboard.filter(note => note.id !== existing.id);
       state.storyLinks = state.storyLinks.filter(link => link.from !== existing.id && link.to !== existing.id);
       queueSave();
       renderStoryboard();
-    }, 'Löschen');
+    }, t("Löschen"));
   };
 }
 
@@ -291,6 +294,15 @@ timelinePanel.addEventListener('drop', event => {
   clearTimelineTarget();
 });
 timelinePanel.addEventListener('dragend', () => { timelineDrag = undefined; clearTimelineTarget(); });
+timelinePanel.addEventListener('click', event => {
+  const control = event.target.closest('[data-timeline-move]');
+  if (!control) return;
+  const id = control.closest('[data-timeline-id]').dataset.timelineId;
+  const notes = timelineNotes();
+  const offset = Number(control.dataset.timelineMove);
+  const target = notes[notes.findIndex(note => note.id === id) + offset];
+  if (target) reorderTimeline(id, target.id, offset > 0);
+});
 timelinePanel.addEventListener('keydown', event => {
   const grip = event.target.closest('[data-timeline-grip]');
   if (!grip || !['ArrowUp','ArrowDown'].includes(event.key)) return;
@@ -305,7 +317,7 @@ timelinePanel.addEventListener('keydown', event => {
 });
 function updateLinkStatus() {
   const note = state.storyboard.find(item => item.id === linking);
-  $('#board-instruction').textContent = note ? 'Zielzettel für „' + note.title + '“ wählen' : 'Zettel über das Kettensymbol verbinden';
+  $('#board-instruction').textContent = note ? t("Zielzettel für „{title}“ wählen", { title: note.title }) : t("Zettel über das Kettensymbol verbinden");
   for (const card of board.querySelectorAll('[data-note-id]')) card.classList.toggle('linking', card.dataset.noteId === linking);
 }
 function startLink(id) {
@@ -363,18 +375,18 @@ function noteLinks(id) {
   const nodes = new Map(state.storyboard.map(note => [note.id, note.title]));
   const links = state.storyLinks.filter(link => [link.from, link.to].includes(id));
   if (!links.length) return '';
-  return '<fieldset class="note-chapter-picker"><legend>Zettelverbindungen</legend><div>' + links.map(link =>
-    `<button type="button" class="secondary" data-edit-story-link="${esc(link.id)}">${esc(nodes.get(link.from))} → ${esc(nodes.get(link.to))} · ${esc(linkColors[link.color])}</button>`).join('') + '</div></fieldset>';
+  return ("<fieldset class=\"note-chapter-picker\"><legend>" + esc(t("Zettelverbindungen")) + "</legend><div>") + links.map(link =>
+    `<button type="button" class="secondary" data-edit-story-link="${esc(link.id)}">${esc(nodes.get(link.from))} → ${esc(nodes.get(link.to))} · ${esc(t(linkColors[link.color]))}</button>`).join('') + '</div></fieldset>';
 }
 function editStoryLink(id) {
   const link = state.storyLinks.find(item => item.id === id);
   if (!link) return;
   const label = state.storyboard.find(note => note.id === link.from).title + ' → ' + state.storyboard.find(note => note.id === link.to).title;
-  openModal('Zettelverbindung', '<p>' + esc(label) + '</p>'
-    + field('Linienfarbe', `<select name="color">${Object.entries(linkColors).map(([key, label]) => option(key, label, link.color)).join('')}</select>`)
-    + '<button id="remove-story-link" type="button" class="text-button">Verbindung entfernen</button>', data => {
+  openModal(t("Zettelverbindung"), '<p>' + esc(label) + '</p>'
+    + field(t("Linienfarbe"), `<select name="color">${Object.entries(linkColors).map(([key, label]) => option(key, t(label), link.color)).join('')}</select>`)
+    + ("<button id=\"remove-story-link\" type=\"button\" class=\"text-button\">" + esc(t("Verbindung entfernen")) + "</button>"), data => {
     const color = data.get('color');
-    if (state.storyLinks.some(item => item.id !== id && item.from === link.from && item.to === link.to && item.color === color)) throw new Error('Diese Verbindung gibt es bereits in der gewählten Farbe.');
+    if (state.storyLinks.some(item => item.id !== id && item.from === link.from && item.to === link.to && item.color === color)) throw new Error(t("Diese Verbindung gibt es bereits in der gewählten Farbe."));
     link.color = color;
     queueSave();
     requestBoardLines();

@@ -56,6 +56,8 @@ if ((failed)); then
 fi
 
 bash tools/release-rpm.sh "$output"
+bash tools/release-deb.sh "$output"
+bash tools/release-android.sh "$output"
 
 version=$(node -p "require('./package.json').version")
 git archive --format=zip --prefix="Scripter-$version-Quellcode/" --output="$output/Scripter-$version-Quellcode.zip" HEAD
@@ -66,5 +68,5 @@ cp STARTEN.txt "$output/"
     unzip -tq "$archive"
   done
   tar -tzf "Scripter-$version-Fedora-Nobara-x64.tar.gz" > /dev/null
-  sha256sum "Scripter-$version-"*.zip "Scripter-$version-Fedora-Nobara-x64.tar.gz" "scripter-$version-1.x86_64.rpm" STARTEN.txt > SHA256SUMS.txt
+  sha256sum "Scripter-$version-"*.zip "Scripter-$version-Fedora-Nobara-x64.tar.gz" "scripter-$version-1.x86_64.rpm" "scripter_${version}_amd64.deb" "Scripter-$version-Android.apk" STARTEN.txt > SHA256SUMS.txt
 )

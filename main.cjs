@@ -9,6 +9,9 @@ const { randomUUID } = require('node:crypto');
 const { applySpeechRules, voiceHints } = require('./speech.cjs');
 const { normalizeAccess } = require('./appearance.js');
 const { productName, version } = require('./package.json');
+const ui = require('./i18n.js');
+require('./i18n-messages.js');
+const { t } = ui;
 const { atomic, bookHtml, escape, locales, project, validProject } = require('./core.cjs');
 
 protocol.registerSchemesAsPrivileged([
@@ -52,9 +55,9 @@ const previewDocuments = new Map();
 const previewFiles = new Set(['index.html', 'preview.css', 'preview.mjs', 'pdf.min.mjs', 'pdf.worker.min.mjs']);
 const previewable = ['.png','.jpg','.jpeg','.gif','.webp','.avif','.bmp'];
 const formats = {
-  pdf: ['PDF (Satzlayout)', 'pdf'], docx: ['Word', 'docx'], doc: ['Word 97–2003', 'doc'],
+  pdf: ["PDF (Satzlayout)", 'pdf'], docx: ['Word', 'docx'], doc: ['Word 97–2003', 'doc'],
   odt: ['OpenDocument Text', 'odt'], epub: ['EPUB 3', 'epub'], rtf: ['Rich Text', 'rtf'],
-  txt: ['Nur Text', 'txt'], markdown: ['Markdown', 'md'], html: ['HTML', 'html'],
+  txt: ["Nur Text", 'txt'], markdown: ['Markdown', 'md'], html: ['HTML', 'html'],
   latex: ['LaTeX', 'tex'], icml: ['InDesign InCopy', 'icml']
 };
 const cloudProviders = new Set(['google','onedrive','dropbox','icloud','other']);
@@ -79,17 +82,17 @@ function load(dir, rememberProject = true) {
 function initialize(dir, title, demo, rememberProject = true, style) {
   fs.mkdirSync(path.join(dir, 'Material'), { recursive: true });
   const filename = path.join(dir, 'roman.json');
-  fs.writeFileSync(filename, JSON.stringify(project(title, demo, style), null, 2), { flag: 'wx' });
+  fs.writeFileSync(filename, JSON.stringify(project(title, demo, style, t("Kapitel") + " 1"), null, 2), { flag: 'wx' });
   return load(dir, rememberProject);
 }
 function persist() {
   let current;
   try { current = fs.readFileSync(manifest, 'utf8'); }
   catch (error) {
-    if (error.code === 'ENOENT') throw new Error('Die Projektdatei ist nicht mehr erreichbar. Prüfe den Ordner oder sichere deinen Arbeitsstand als Kopie.');
+    if (error.code === 'ENOENT') throw new Error(t("Die Projektdatei ist nicht mehr erreichbar. Prüfe den Ordner oder sichere deinen Arbeitsstand als Kopie."));
     throw error;
   }
-  if (current !== manifestContents) throw new Error('Die Projektdatei wurde außerhalb dieses Fensters geändert. Sichere deinen Arbeitsstand als Kopie, bevor du die andere Fassung öffnest.');
+  if (current !== manifestContents) throw new Error(t("Die Projektdatei wurde außerhalb dieses Fensters geändert. Sichere deinen Arbeitsstand als Kopie, bevor du die andere Fassung öffnest."));
   const next = JSON.stringify(state, null, 2);
   if (next === current) return;
   atomic(manifest, next);
@@ -105,6 +108,7 @@ function normalizeLocations(value) {
   const knownPath = input => typeof input === 'string' && path.isAbsolute(input) && !input.includes('\0') ? path.normalize(input) : '';
   return {
     preferred: knownPath(value?.preferred),
+    uiLanguage: ui.normalize(value?.uiLanguage),
     provider: cloudProviders.has(value?.provider) ? value.provider : 'google',
     access: normalizeAccess(value?.access),
     clouds: Object.fromEntries([...cloudProviders].map(key => [key, knownPath(value?.clouds?.[key])]))
@@ -116,7 +120,7 @@ function folderContains(root, candidate) {
 }
 function cloudRoot() {
   const chosen = locations.clouds[locations.provider];
-  if (!chosen) throw new Error('Richte zuerst in den Einstellungen einen Cloud-Ordner ein.');
+  if (!chosen) throw new Error(t("Richte zuerst in den Einstellungen einen Cloud-Ordner ein."));
   try {
     if (fs.statSync(chosen).isDirectory()) return fs.realpathSync(chosen);
   } catch {}
@@ -129,11 +133,11 @@ function preferredRoot() {
 }
 function requireNewDestination(destination, root, copy = false) {
   const resolved = path.join(fs.realpathSync(path.dirname(destination)), path.basename(destination));
-  if (root && !folderContains(root, resolved)) throw new Error('Wähle einen Ordner innerhalb deines Cloud-Ordners.');
+  if (root && !folderContains(root, resolved)) throw new Error(t("Wähle einen Ordner innerhalb deines Cloud-Ordners."));
   let source = path.resolve(folder);
   try { source = fs.realpathSync(folder); } catch {}
-  if (copy && folderContains(source, resolved)) throw new Error('Wähle einen neuen Ordner außerhalb des Projektordners.');
-  if (fs.existsSync(resolved)) throw new Error('Wähle einen neuen Ordnernamen.');
+  if (copy && folderContains(source, resolved)) throw new Error(t("Wähle einen neuen Ordner außerhalb des Projektordners."));
+  if (fs.existsSync(resolved)) throw new Error(t("Wähle einen neuen Ordnernamen."));
   return resolved;
 }
 async function writeProjectCopy(destination, draft) {
@@ -151,20 +155,20 @@ async function writeProjectCopy(destination, draft) {
 }
 function asset(id) {
   const result = state.assets.find(entry => entry.id === id);
-  if (!result) throw new Error('Das Material wurde nicht gefunden.');
+  if (!result) throw new Error(t("Das Material wurde nicht gefunden."));
   return result;
 }
 function assetPath(item) {
   const file = path.basename(item.file || '');
-  if (!file || !file.startsWith(item.id + '.')) throw new Error('Ungültiger Materialpfad.');
+  if (!file || !file.startsWith(item.id + '.')) throw new Error(t("Ungültiger Materialpfad."));
   return path.join(folder, 'Material', file);
 }
 function fileStem(value) {
-  return value.replace(/[<>:"/\\|?*\u0000-\u001f]/g, ' ').trim().replace(/[. ]+$/, '').slice(0, 100) || 'Manuskript';
+  return value.replace(/[<>:"/\\|?*\u0000-\u001f]/g, ' ').trim().replace(/[. ]+$/, '').slice(0, 100) || t("Manuskript");
 }
 function webAddress(value) {
   const url = new URL(value);
-  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('Nutze eine gültige HTTP- oder HTTPS-Adresse.');
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error(t("Nutze eine gültige HTTP- oder HTTPS-Adresse."));
   return url.href;
 }
 function run(program, args, options = {}) {
@@ -188,7 +192,7 @@ async function executable(name, candidates) {
       return candidate;
     } catch {}
   }
-  throw new Error(`${name} wurde nicht gefunden. Die Installationsanleitung findest du unter „Hilfe“.`);
+  throw new Error(t("{program} wurde nicht gefunden. Die Installationsanleitung findest du unter „Hilfe“.", { program: name }));
 }
 const pandoc = () => executable('Pandoc', [process.env.ROMAN_PANDOC, path.join(process.resourcesPath, process.platform === 'win32' ? 'pandoc.exe' : 'pandoc'), 'pandoc', '/opt/homebrew/bin/pandoc', '/usr/local/bin/pandoc', path.join(process.env.LOCALAPPDATA || os.homedir(), 'Pandoc', 'pandoc.exe'), 'C:\\Program Files\\Pandoc\\pandoc.exe'].filter(Boolean));
 const office = () => executable('LibreOffice', ['soffice', '/Applications/LibreOffice.app/Contents/MacOS/soffice', 'C:\\Program Files\\LibreOffice\\program\\soffice.com', 'C:\\Program Files (x86)\\LibreOffice\\program\\soffice.com']);
@@ -208,7 +212,7 @@ const isWin = process.platform === 'win32';
 const voiceDir = () => path.join(app.getPath('userData'), 'sprache');
 const voicePython = () => path.join(voiceDir(), 'venv', isWin ? 'Scripts/python.exe' : 'bin/python');
 async function setupWhisper() {
-  if (whisperBusy) throw new Error('Eine Sprachaufgabe läuft bereits.');
+  if (whisperBusy) throw new Error(t("Eine Sprachaufgabe läuft bereits."));
   whisperBusy = true;
   try {
     await fsp.mkdir(voiceDir(), { recursive: true });
@@ -227,7 +231,7 @@ async function setupWhisper() {
           break;
         } catch {}
       }
-      if (!created) throw new Error('Python 3.12 mit venv wurde nicht gefunden. Siehe Installationsanleitung.');
+      if (!created) throw new Error(t("Python 3.12 mit venv wurde nicht gefunden. Siehe Installationsanleitung."));
     }
     await run(voicePython(), ['-m','pip','install','--disable-pip-version-check','faster-whisper==1.2.1','av==16.1.0']);
     await run(voicePython(), ['-c','from faster_whisper.utils import download_model; import sys; download_model("base", output_dir=sys.argv[1])', path.join(voiceDir(), 'modell')], { env: { ...process.env, HF_HUB_DISABLE_XET: '1', HF_HOME: path.join(voiceDir(), 'cache') } });
@@ -238,9 +242,9 @@ async function setupWhisper() {
   }
 }
 async function transcript(source, lang) {
-  if (!['auto','de','en'].includes(lang)) throw new Error('Ungültige Transkriptsprache.');
-  if (whisperBusy) throw new Error('Eine Sprachaufgabe läuft bereits.');
-  if (!fs.existsSync(path.join(voiceDir(), 'bereit.json'))) throw new Error('Richte die Spracherkennung zuerst unter „Einstellungen“ ein.');
+  if (!['auto','de','en'].includes(lang)) throw new Error(t("Ungültige Transkriptsprache."));
+  if (whisperBusy) throw new Error(t("Eine Sprachaufgabe läuft bereits."));
+  if (!fs.existsSync(path.join(voiceDir(), 'bereit.json'))) throw new Error(t("Richte die Spracherkennung zuerst unter „Einstellungen“ ein."));
   whisperBusy = true;
   let temp;
   try {
@@ -248,10 +252,10 @@ async function transcript(source, lang) {
     let input;
     if (typeof source === 'string') {
       const item = asset(source);
-      if (!['audio','video','recording'].includes(item.kind)) throw new Error('Wähle eine Audio- oder Videodatei.');
+      if (!['audio','video','recording'].includes(item.kind)) throw new Error(t("Wähle eine Audio- oder Videodatei."));
       input = assetPath(item);
     } else {
-      if (source.bytes.byteLength > 200 * 1024 * 1024) throw new Error('Die Diktataufnahme ist zu groß.');
+      if (source.bytes.byteLength > 200 * 1024 * 1024) throw new Error(t("Die Diktataufnahme ist zu groß."));
       input = path.join(temp, 'diktat.webm');
       await fsp.writeFile(input, Buffer.from(source.bytes));
     }
@@ -274,8 +278,8 @@ async function insertable(id) {
   if (item.kind === 'web') return { type: 'link', url: item.url, name: item.name };
   const filename = assetPath(item);
   if (item.kind === 'image') {
-    if (!previewable.includes(path.extname(filename))) throw new Error('Für den Manuskriptsatz werden PNG, JPEG, GIF, WebP, AVIF und BMP unterstützt. Das Original kann in der Materialsammlung geöffnet werden.');
-    if ((await fsp.stat(filename)).size > 8 * 1024 * 1024) throw new Error('Bitte verkleinere das Bild zum Einfügen auf maximal 8 MB.');
+    if (!previewable.includes(path.extname(filename))) throw new Error(t("Für den Manuskriptsatz werden PNG, JPEG, GIF, WebP, AVIF und BMP unterstützt. Das Original kann in der Materialsammlung geöffnet werden."));
+    if ((await fsp.stat(filename)).size > 8 * 1024 * 1024) throw new Error(t("Bitte verkleinere das Bild zum Einfügen auf maximal 8 MB."));
     const ext = path.extname(filename).slice(1);
     return { type: 'image', url: `data:image/${ext === 'jpg' ? 'jpeg' : ext};base64,${(await fsp.readFile(filename)).toString('base64')}`, name: item.name };
   }
@@ -283,9 +287,9 @@ async function insertable(id) {
     const program = await executable('Poppler / pdftotext', ['pdftotext', '/opt/homebrew/bin/pdftotext', '/usr/local/bin/pdftotext']);
     return { type: 'text', value: await run(program, ['-enc', 'UTF-8', filename, '-']) };
   }
-  if (item.kind !== 'text') throw new Error('Für dieses Material steht Transkribieren zur Verfügung.');
+  if (item.kind !== 'text') throw new Error(t("Für dieses Material steht Transkribieren zur Verfügung."));
   const ext = path.extname(filename);
-  if ((await fsp.stat(filename)).size > 20 * 1024 * 1024) throw new Error('Die Datei ist zum direkten Einfügen zu groß.');
+  if ((await fsp.stat(filename)).size > 20 * 1024 * 1024) throw new Error(t("Die Datei ist zum direkten Einfügen zu groß."));
   if (['.txt','.md','.markdown','.csv','.tex'].includes(ext)) {
     const raw = await fsp.readFile(filename);
     const encoding = raw[0] === 255 && raw[1] === 254 ? 'utf-16le' : raw[0] === 254 && raw[1] === 255 ? 'utf-16be' : 'utf-8';
@@ -321,7 +325,7 @@ async function printPdf(html) {
 async function publish(format, manuscript) {
   if (format === 'preview') {
     const bytes = await printPdf(bookHtml(manuscript, manuscript.chapters, manuscript.settings, true));
-    const preview = new BrowserWindow({ parent: main, width: 1160, height: 840, minWidth: 540, frame: !isLinux, title: 'Satzvorschau', autoHideMenuBar: true,
+    const preview = new BrowserWindow({ parent: main, width: 1160, height: 840, minWidth: 540, frame: !isLinux, title: t("Satzvorschau"), autoHideMenuBar: true,
       webPreferences: { preload: path.join(__dirname, 'preview-preload.cjs'), contextIsolation: true, sandbox: true } });
     const id = preview.webContents.id;
     previewDocuments.set(id, { bytes, theme: manuscript.settings.theme, access: locations.access, window: describeWindow(preview) });
@@ -329,13 +333,13 @@ async function publish(format, manuscript) {
     preview.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     preview.webContents.on('will-navigate', event => event.preventDefault());
     preview.on('closed', () => previewDocuments.delete(id));
-    try { await preview.loadURL('romansatz://app/index.html'); }
+    try { await preview.loadURL('romansatz://app/index.html?lang=' + locations.uiLanguage); }
     catch (error) { preview.destroy(); throw error; }
     return true;
   }
-  if (!Object.hasOwn(formats, format)) throw new Error('Unbekanntes Exportformat.');
+  if (!Object.hasOwn(formats, format)) throw new Error(t("Unbekanntes Exportformat."));
   const [label, extension] = formats[format];
-  const result = await dialog.showSaveDialog(main, { title: 'Manuskript exportieren', defaultPath: fileStem(manuscript.title) + '.' + extension, filters: [{ name: label, extensions: [extension] }] });
+  const result = await dialog.showSaveDialog(main, { title: t("Manuskript exportieren"), defaultPath: fileStem(manuscript.title) + '.' + extension, filters: [{ name: t(label), extensions: [extension] }] });
   if (result.canceled) return false;
   const output = result.filePath;
   const html = bookHtml(manuscript, manuscript.chapters, manuscript.settings, format === 'pdf');
@@ -393,35 +397,40 @@ app.whenReady().then(() => {
   else Menu.setApplicationMenu(null);
   main.webContents.on('context-menu', (_, params) => {
     const items = [...params.dictionarySuggestions.slice(0, 7).map(word => ({ label: word, click: () => main.webContents.replaceMisspelling(word) }))];
-    if (params.misspelledWord) items.push({ label: 'Zum Wörterbuch hinzufügen', click: () => session.defaultSession.addWordToSpellCheckerDictionary(params.misspelledWord) });
+    if (params.misspelledWord) items.push({ label: t("Zum Wörterbuch hinzufügen"), click: () => session.defaultSession.addWordToSpellCheckerDictionary(params.misspelledWord) });
     if (params.isEditable || params.selectionText) {
       if (items.length) items.push({ type: 'separator' });
-      if (params.isEditable) items.push({ role: 'cut', label: 'Ausschneiden', enabled: params.editFlags.canCut });
-      items.push({ role: 'copy', label: 'Kopieren', enabled: params.editFlags.canCopy });
-      if (params.isEditable) items.push({ role: 'paste', label: 'Einfügen', enabled: params.editFlags.canPaste });
+      if (params.isEditable) items.push({ role: 'cut', label: t("Ausschneiden"), enabled: params.editFlags.canCut });
+      items.push({ role: 'copy', label: t("Kopieren"), enabled: params.editFlags.canCopy });
+      if (params.isEditable) items.push({ role: 'paste', label: t("Einfügen"), enabled: params.editFlags.canPaste });
     }
     if (items.length) Menu.buildFromTemplate(items).popup();
   });
   protocol.handle('romansatz', async request => {
     const address = new URL(request.url);
     const file = address.pathname.slice(1);
-    if (address.hostname !== 'app' || !previewFiles.has(file)) return new Response('', { status: 404 });
+    if (address.hostname !== 'app') return new Response('', { status: 404 });
+    const scripts = ['i18n.js', 'i18n-messages.js', 'i18n-ui.js'];
+    if (scripts.some(name => file === 'i18n/' + name)) {
+      return new Response(await fsp.readFile(path.join(__dirname, path.basename(file))), { headers: { 'Content-Type': 'text/javascript; charset=utf-8' } });
+    }
+    if (!previewFiles.has(file)) return new Response('', { status: 404 });
     const mime = file.endsWith('.html') ? 'text/html' : file.endsWith('.css') ? 'text/css' : 'text/javascript';
     return new Response(await fsp.readFile(path.join(__dirname, 'pdf-preview', file)), { headers: { 'Content-Type': mime + '; charset=utf-8' } });
   });
   ipcMain.handle('window-control', (event, action) => {
     const win = BrowserWindow.fromWebContents(event.sender);
-    if (!isLinux || !win || event.senderFrame?.parent || (win !== main && !previewDocuments.has(event.sender.id))) throw new Error('Fenstersteuerung nicht verfügbar.');
+    if (!isLinux || !win || event.senderFrame?.parent || (win !== main && !previewDocuments.has(event.sender.id))) throw new Error(t("Fenstersteuerung nicht verfügbar."));
     if (action === 'minimize') win.minimize();
     else if (action === 'toggle-maximize') {
       if (win.isMaximized()) win.unmaximize();
       else win.maximize();
     } else if (action === 'close') setImmediate(() => { if (!win.isDestroyed()) win.close(); });
-    else if (action !== 'get') throw new Error('Unbekannte Fensteraktion.');
+    else if (action !== 'get') throw new Error(t("Unbekannte Fensteraktion."));
     return describeWindow(win);
   });
   ipcMain.handle('preview-pdf', event => {
-    if (event.senderFrame?.parent || !previewDocuments.has(event.sender.id)) throw new Error('Satzvorschau ist nicht verfügbar.');
+    if (event.senderFrame?.parent || !previewDocuments.has(event.sender.id)) throw new Error(t("Satzvorschau ist nicht verfügbar."));
     return previewDocuments.get(event.sender.id);
   });
   protocol.handle('romanasset', request => {
@@ -432,7 +441,7 @@ app.whenReady().then(() => {
     } catch { return new Response('', { status: 404 }); }
   });
   const handle = (name, action) => ipcMain.handle(name, (event, ...args) => {
-    if (event.sender !== main.webContents || event.senderFrame?.parent) throw new Error('Ungültiger Aufruf.');
+    if (event.sender !== main.webContents || event.senderFrame?.parent) throw new Error(t("Ungültiger Aufruf."));
     return action(...args);
   });
   handle('get', () => state);
@@ -449,41 +458,42 @@ app.whenReady().then(() => {
     const next = normalizeLocations(input);
     atomic(locationFile, JSON.stringify(next, null, 2));
     locations = next;
+    ui.setLanguage(locations.uiLanguage);
     return next;
   });
   handle('choose-folder', async selected => {
-    const choice = await dialog.showOpenDialog(main, { title: 'Ordner auswählen', defaultPath: typeof selected === 'string' && path.isAbsolute(selected) ? selected : preferredRoot(), properties: ['openDirectory','createDirectory'] });
+    const choice = await dialog.showOpenDialog(main, { title: t("Ordner auswählen"), defaultPath: typeof selected === 'string' && path.isAbsolute(selected) ? selected : preferredRoot(), properties: ['openDirectory','createDirectory'] });
     return choice.canceled ? null : choice.filePaths[0];
   });
   handle('new', async (cloud, details) => {
     const root = cloud ? cloudRoot() : null;
     const title = typeof details?.title === 'string' ? details.title.trim().slice(0, 180) : '';
-    const suggestedFolder = title ? fileStem(title) : 'Mein Roman';
-    const choice = await dialog.showSaveDialog(main, { title: 'Projektordner anlegen', defaultPath: path.join(root ?? preferredRoot(), suggestedFolder) });
+    const suggestedFolder = title ? fileStem(title) : t("Mein Roman");
+    const choice = await dialog.showSaveDialog(main, { title: t("Projektordner anlegen"), defaultPath: path.join(root ?? preferredRoot(), suggestedFolder) });
     if (choice.canceled) return null;
     const destination = requireNewDestination(choice.filePath, root);
     return initialize(destination, title || path.basename(destination), false, true, details);
   });
   handle('open', async cloud => {
     const root = cloud ? cloudRoot() : null;
-    const choice = await dialog.showOpenDialog(main, { title: 'roman.json aus einem Projekt öffnen', defaultPath: root ?? preferredRoot(), properties: ['openFile'], filters: [{ name: 'Scripter-Projekt', extensions: ['json'] }] });
+    const choice = await dialog.showOpenDialog(main, { title: t("roman.json aus einem Projekt öffnen"), defaultPath: root ?? preferredRoot(), properties: ['openFile'], filters: [{ name: t("Scripter-Projekt"), extensions: ['json'] }] });
     if (choice.canceled) return null;
-    if (path.basename(choice.filePaths[0]) !== 'roman.json') throw new Error('Wähle die Datei „roman.json“ im Projektordner.');
+    if (path.basename(choice.filePaths[0]) !== 'roman.json') throw new Error(t("Wähle die Datei „roman.json“ im Projektordner."));
     const dir = fs.realpathSync(path.dirname(choice.filePaths[0]));
-    if (root && !folderContains(root, dir)) throw new Error('Wähle ein Projekt innerhalb deines Cloud-Ordners.');
+    if (root && !folderContains(root, dir)) throw new Error(t("Wähle ein Projekt innerhalb deines Cloud-Ordners."));
     return load(dir);
   });
   handle('backup', async (draft, cloud) => {
     const root = cloud ? cloudRoot() : null;
-    const name = fileStem(draft.title) + (cloud ? '' : ' – Sicherung');
-    const choice = await dialog.showSaveDialog(main, { title: cloud ? 'Projekt als Cloud-Kopie speichern' : 'Sicherung in neuem Ordner speichern', defaultPath: path.join(root ?? preferredRoot(), name) });
+    const name = fileStem(draft.title) + (cloud ? '' : t(" – Sicherung"));
+    const choice = await dialog.showSaveDialog(main, { title: cloud ? t("Projekt als Cloud-Kopie speichern") : t("Sicherung in neuem Ordner speichern"), defaultPath: path.join(root ?? preferredRoot(), name) });
     if (choice.canceled) return null;
     const destination = requireNewDestination(choice.filePath, root, true);
     await writeProjectCopy(destination, draft);
     return true;
   });
   handle('pick', async () => {
-    const result = await dialog.showOpenDialog(main, { title: 'Material hinzufügen', properties: ['openFile','multiSelections'] });
+    const result = await dialog.showOpenDialog(main, { title: t("Material hinzufügen"), properties: ['openFile','multiSelections'] });
     return result.filePaths;
   });
   handle('add', async files => {
@@ -496,7 +506,7 @@ app.whenReady().then(() => {
       item.file = item.id + (ext || '.bin');
       const dest = path.join(dir, item.file);
       try {
-        if (!(await fsp.stat(file)).isFile()) throw new Error('Datei erwartet.');
+        if (!(await fsp.stat(file)).isFile()) throw new Error(t("Datei erwartet."));
         await fsp.copyFile(file, dest);
         state.assets.push(item);
         try { persist(); } catch (error) { state.assets.pop(); throw error; }
@@ -567,11 +577,12 @@ app.whenReady().then(() => {
   handle('transcribe', transcript);
   handle('publish', publish);
   handle('help', async () => {
-    const win = new BrowserWindow({ parent: main, width: 800, height: 800, title: 'Hilfe', webPreferences: { javascript: false, sandbox: true } });
+    const win = new BrowserWindow({ parent: main, width: 800, height: 800, title: t("Hilfe"), webPreferences: { sandbox: true } });
     win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(webAddress(url)).catch(() => {}); return { action: 'deny' }; });
     win.webContents.on('will-navigate', event => event.preventDefault());
-    await win.loadFile('hilfe.html');
+    await win.loadFile('hilfe.html', { query: { lang: locations.uiLanguage } });
   });
+  ui.setLanguage(locations.uiLanguage);
   main.loadFile('index.html');
 });
 app.on('window-all-closed', () => app.quit());
