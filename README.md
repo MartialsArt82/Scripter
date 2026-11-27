@@ -1,4 +1,4 @@
-# Scripter 1.4
+# Scripter 1.5
 
 Lokale Schreib-App für Romanprojekte unter Windows, macOS, Linux und Android. Installationspakete für Debian/Ubuntu (DEB), Fedora/Nobara (RPM) und Android (APK) sowie portable Desktop-Pakete stehen unter [Releases](https://github.com/MartialsArt82/Scripter/releases).
 
@@ -32,7 +32,7 @@ Benötigt werden im Runtime-Ordner die Plattformarchive `<ziel>.zip` für Electr
 
 ## GitHub-Release
 
-Der Workflow auf `codex/scripter-release-1.4` baut vier portable Pakete, das Fedora/Nobara-RPM, das Debian-Paket und die Android-App. Nach der APK-Signaturprüfung und dem Abgleich der SHA-256-Prüfsummen veröffentlicht er die Dateien unter **Assets**.
+Der Workflow auf `codex/scripter-release-1.5` baut vier portable Pakete, das Fedora/Nobara-RPM, das Debian-Paket und die Android-App. Nach der APK-Signaturprüfung und dem Abgleich der SHA-256-Prüfsummen veröffentlicht er die Dateien unter **Assets**.
 
 `bash tools/release-build.sh /absoluter/ausgabeordner` führt denselben Build unter Linux x64 mit `rpmbuild`, `rpm`, `desktop-file-validate`, `dpkg-deb`, JDK 17 und Android SDK 35 aus. Das Skript lädt die geprüften Electron-, Pandoc- und Signierwerkzeuge bei Bedarf herunter.
 
@@ -47,11 +47,13 @@ bash tools/android-build.sh /pfad/zu/Scripter-unsigned.apk
 
 Zum Signieren dient `tools/android-sign.sh` mit einem PKCS#12-Keystore (Alias `scripter`) und den Umgebungsvariablen `SCRIPTER_ANDROID_KEYSTORE` und `SCRIPTER_ANDROID_KEY_PASSWORD`. Der Release-Workflow akzeptiert die Actions-Secrets `SCRIPTER_ANDROID_KEYSTORE_B64` und `SCRIPTER_ANDROID_KEY_PASSWORD` oder eine bereits lokal signierte APK aus `codex/scripter-apk-<version>`. Vor Veröffentlichung prüft er das Zertifikat und vergleicht den APK-Inhalt mit dem frischen Quellcode-Build. Für Updates muss dasselbe Zertifikat verwendet werden.
 
-Android verwendet den System-Dateidialog für Material, Projekt-ZIPs und Exporte. PDF läuft über den Android-Druckdialog. Buchsatz mit animierter Doppelseite, Transkripte aus Audio- und Videodateien und die erweiterten Exportformate sind Desktop-Funktionen.
+Android verwendet den System-Dateidialog für Material, Projektdateien und Exporte. PDF läuft über den Android-Druckdialog. Buchsatz mit animierter Doppelseite, Transkripte aus Audio- und Videodateien und die erweiterten Exportformate sind Desktop-Funktionen.
 
 ## Projektdaten
 
-Ein Projekt besteht aus einer JSON-Datei und dem Unterordner `Material`. Das Manuskript verwendet formatiertes HTML. Die Desktop-App öffnet beim ersten Start ein fiktives Beispielprojekt. Android legt ein leeres Projekt an. Dateien und Transkripte werden lokal abgelegt. Eine Projektsicherung schließt die Materialdateien ein. Android sichert als ZIP mit `roman.json` und `Material`. Für den Wechsel von Desktop zu Android kann derselbe Aufbau als ZIP gepackt werden. Die Datei `roman.json` kann auch einzeln geöffnet werden.
+Eine `.scrpt`-Datei ist ein ZIP-Container mit `roman.json` und den Anhängen unter `Material/`. Das Manuskript verwendet formatiertes HTML. Desktop-Projekte werden standardmäßig als `.scrpt` angelegt. Scripter speichert zuerst im lokalen Arbeitsordner und ersetzt das Paket nach erfolgreichem Schreiben. Wenn eine andere Anwendung oder der Cloud-Dienst das Paket geändert hat, kannst du deinen Arbeitsstand als separate Datei sichern.
+
+Vorhandene Projekte lassen sich über `roman.json` oder eine ältere Scripter-ZIP-Sicherung öffnen. Mit **Als .scrpt speichern …** kannst du sie umwandeln. Android speichert das Arbeitsprojekt lokal in der App. Zum Übertragen exportierst du über denselben Menüpunkt eine neue `.scrpt`-Datei und importierst sie auf dem anderen Gerät.
 
 Die Bedienung, Installation der Spracherkennung, optionalen Systemprogramme und Exportgrenzen stehen in `hilfe.html` und `STARTEN.txt`.
 

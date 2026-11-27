@@ -144,7 +144,7 @@
       const projects = call('projects');
       const rows = projects.map(project => `<button type="button" class="secondary" data-mobile-project="${esc(project.id)}">${esc(project.title)}</button>`).join('');
       openModal(t("Projekt öffnen"), `<div class="mobile-project-list">${rows}
-        <button type="button" class="secondary" id="android-import-project">${esc(t("ZIP oder roman.json öffnen"))}</button></div>`);
+        <button type="button" class="secondary" id="android-import-project">${esc(t(".scrpt, ZIP oder roman.json öffnen"))}</button></div>`);
       const closed = () => resolve(null);
       modal.addEventListener('close', closed, { once: true });
       for (const button of $$('[data-mobile-project]')) button.onclick = () => {
@@ -186,7 +186,11 @@
     async zoom(zoom) { call('zoom', { zoom }); },
     newProject: async (_cloud, details) => newProject(details),
     openProject,
-    backup: async data => request('backup', { project: active, mime: 'application/zip', filename: fileStem(data.title) + '.zip', contents: JSON.stringify({ ...data, assets }) }),
+    backup: async (data, _cloud, saveAs) => request('backup', {
+      project: active, mime: 'application/vnd.scripter.project',
+      filename: fileStem(data.title) + (saveAs ? '' : t(" – Sicherung")) + '.scrpt',
+      contents: JSON.stringify({ ...data, assets })
+    }),
     pick: async () => {
       const result = await request('pick', { project: active });
       return result ? [result] : [];

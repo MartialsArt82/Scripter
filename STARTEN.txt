@@ -1,4 +1,4 @@
-SCRIPTER 1.4
+SCRIPTER 1.5
 
 Windows x64
   Die ZIP-Datei vollständig entpacken. Im Ordner „Scripter“
@@ -6,23 +6,23 @@ Windows x64
 
 Debian und Ubuntu x64
   Im Download-Ordner im Terminal installieren:
-    sudo apt install ./scripter_1.4_amd64.deb
+    sudo apt install ./scripter_1.5_amd64.deb
   „Scripter“ über die Anwendungsübersicht öffnen.
 
 Android (ab Version 8.0)
-  Scripter-1.4-Android.apk herunterladen und antippen. Falls Android nach
+  Scripter-1.5-Android.apk herunterladen und antippen. Falls Android nach
   der Erlaubnis für diese Quelle fragt, erteile sie dem Browser oder der
   Dateien-App, aus der du das Paket öffnest.
-  Im Projektmenü lassen sich ZIP-Sicherungen mit Material erstellen und
-  einlesen. Auf dem Desktop kannst du die ZIP-Datei entpacken und die
-  darin enthaltene roman.json öffnen. Eine einzelne roman.json lässt
-  sich auf Android öffnen. Materialdateien überträgst du mit der ZIP.
+  Android speichert den Arbeitsstand lokal in der App. Wähle im
+  Projektmenü „Als .scrpt speichern …“, um eine Datei mit Manuskript
+  und Material zu erstellen. Unter „Projekt öffnen“ kannst du .scrpt,
+  frühere Scripter-ZIP-Sicherungen und roman.json einlesen.
   Android-Diktat nutzt den Spracherkenner des Geräts. Zur PDF-Ausgabe im
   Systemdruckdialog „Als PDF speichern“ wählen.
 
 Fedora und Nobara x64
   Das RPM herunterladen und per Terminal installieren:
-    sudo dnf install ./scripter-1.4-1.x86_64.rpm
+    sudo dnf install ./scripter-1.5-1.x86_64.rpm
   „Scripter“ über die Anwendungsübersicht öffnen. Unter GNOME mit
   Rechtsklick auf das Symbol und „Zu Favoriten hinzufügen“ anheften.
   Unter KDE im Anwendungsmenü oder in der Taskleiste anheften.
@@ -47,8 +47,8 @@ macOS
 
 Erste Schritte
   Über das Projektmenü oben links ein neues Projekt anlegen. Die App
-  speichert lokal. Für Sicherungen und Gerätewechsel den vollständigen
-  Projektordner inklusive „roman.json“ und „Material“ kopieren.
+  legt am Desktop eine .scrpt-Datei an und speichert Änderungen
+  automatisch. Die Datei enthält das Manuskript und die Anhänge.
   Unter Einstellungen → Oberflächensprache kannst du Deutsch, Englisch,
   Französisch, Spanisch oder Portugiesisch auswählen.
 

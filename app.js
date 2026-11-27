@@ -571,7 +571,7 @@ $('#theme').onclick = () => {
 $('#help').onclick = () => {
   if (!mobile) return window.desk.help().catch(errorToast);
   openModal(t("Hilfe"), `<p>${esc(t("Öffne die Navigation, um ein Projekt oder Kapitel auszuwählen. Über die Kapitelwerkzeuge bearbeitest du das Schreibziel und prüfst die Rechtschreibung."))}</p>
-    <p>${esc(t("Sichere dein Projekt als ZIP, um es mit Material auf ein anderes Gerät zu übertragen. Android kann die ZIP-Datei sowie eine einzelne roman.json öffnen."))}</p>
+    <p>${esc(t("Android speichert Änderungen lokal in der App. Über „Als .scrpt speichern …“ erstellst du eine Datei mit dem Manuskript und allen Anhängen. Unter „Projekt öffnen“ kannst du .scrpt, ältere ZIP-Sicherungen und roman.json importieren."))}</p>
     <p>${esc(t("Android nutzt die Diktierfunktion des Geräts. Die Transkription importierter Audio- und Videodateien sowie der vollständige Drucksatz stehen in der Desktop-App zur Verfügung."))}</p>`);
 };
 $('#export').onclick = publicationDialog;
@@ -645,28 +645,41 @@ for (const button of $$('[data-project]')) button.onclick = async () => {
 };
 async function runProjectAction(action, discard = false, details) {
   if (projectDialogBusy || imports || recording || transcribing) return toast(t("Beende zuerst die laufende Projektaktion."));
-  const copy = ['backup', 'copy-cloud'].includes(action);
-  if (!copy && !discard && !flush()) {
-    openModal(t("Projekt wechseln?"), ("<p>" + esc(t("Der aktuelle Arbeitsstand konnte nicht gespeichert werden. Sichere ihn im Projektmenü als Kopie, wenn du ihn behalten willst.")) + "</p>"), async () => {
-      modal.close();
-      await runProjectAction(action, true, details);
-      return false;
-    }, t("Trotzdem wechseln"));
-    return;
-  }
+  const copy = ['backup', 'copy-cloud', 'save-as'].includes(action);
   projectDialogBusy = true;
+  const blockEditing = !mobile && action === 'save-as';
   try {
+    if (!copy && !discard) {
+      let saved = flush();
+      if (saved) {
+        try { await window.desk.waitForSave?.(); } catch { saved = false; }
+      }
+      if (!saved) {
+        openModal(t("Projekt wechseln?"), "<p>" + esc(t("Der aktuelle Arbeitsstand konnte nicht gespeichert werden. Sichere ihn im Projektmenü als Kopie, wenn du ihn behalten willst.")) + "</p>", async () => {
+          modal.close();
+          await runProjectAction(action, true, details);
+          return false;
+        }, t("Trotzdem wechseln"));
+        return;
+      }
+    }
+    if (blockEditing) document.body.inert = true;
     if (copy) {
-      if (await window.desk.backup(state, action === 'copy-cloud')) {
+      const saved = await window.desk.backup(state, action === 'copy-cloud', action === 'save-as');
+      if (saved) {
+        if (typeof saved === 'object') startProject(saved);
         toast(action === 'copy-cloud' ? t("Cloud-Kopie gespeichert. Öffne sie über „Cloud-Projekt öffnen“.") : t("Projektsicherung gespeichert."));
       }
     } else {
       const method = action.startsWith('new') ? 'newProject' : 'openProject';
-      const next = await window.desk[method](action.endsWith('-cloud'), details);
+      const next = await window.desk[method](action.endsWith('-cloud'), details, discard);
       if (next) startProject(next);
     }
   } catch (error) { errorToast(error); }
-  finally { projectDialogBusy = false; }
+  finally {
+    if (blockEditing) document.body.inert = false;
+    projectDialogBusy = false;
+  }
 }
 $('#chapter-title').addEventListener('input', event => {
   chapter().title = event.target.value;
@@ -886,9 +899,14 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) flush
 window.addEventListener('beforeunload', event => {
   if (!flush()) { event.preventDefault(); event.returnValue = false; }
 });
-document.addEventListener('keydown', event => {
+document.addEventListener('keydown', async event => {
   if (!state || modal.open) return;
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); if (flush()) toast(t("Projekt gespeichert.")); }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+    event.preventDefault();
+    if (!flush()) return;
+    try { await window.desk.waitForSave?.(); toast(t("Projekt gespeichert.")); }
+    catch (error) { errorToast(error); }
+  }
   if (event.key === 'Escape' && document.body.classList.contains('focus')) toggleFocus();
 });
 decorate();
@@ -903,6 +921,7 @@ window.desk.unavailableProject().then(path => {
 for (const button of $$('[data-window-action]')) {
   button.onclick = () => window.desk.windowControl(button.dataset.windowAction).then(updateWindowControls).catch(errorToast);
 }
+window.desk.onArchiveError?.(message => toast(t(message), true));
 window.desk.onWindowState(updateWindowControls);
 window.desk.identity().then(({ name, version, window: status }) => {
   updateWindowControls(status);
