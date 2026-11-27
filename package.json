@@ -1,7 +1,7 @@
 {
   "name": "scripter",
-  "version": "1.4",
-  "androidVersionCode": 10401,
+  "version": "1.5",
+  "androidVersionCode": 10500,
   "description": "Lokale Schreibwerkstatt für Romane",
   "main": "main.cjs",
   "private": true,
@@ -17,7 +17,9 @@
     "dictionary-fr": "^3.0.0",
     "dictionary-pt": "^4.0.0",
     "dompurify": "^3.4.0",
-    "hunspell-asm": "4.0.2"
+    "hunspell-asm": "4.0.2",
+    "yauzl": "3.4.0",
+    "yazl": "3.3.1"
   },
   "devDependencies": {
     "@electron/asar": "^3.4.1",

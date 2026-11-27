@@ -13,6 +13,7 @@ const ui = require('./i18n.js');
 require('./i18n-messages.js');
 const { t } = ui;
 const { atomic, bookHtml, escape, locales, project, validProject } = require('./core.cjs');
+const { ArchiveSession, readArchive, writeArchive, stamp, digest } = require('./project-archive.cjs');
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'romanasset', privileges: { secure: true, standard: true, supportFetchAPI: true, stream: true } },
@@ -62,23 +63,99 @@ const formats = {
 };
 const cloudProviders = new Set(['google','onedrive','dropbox','icloud','other']);
 let main, folder, manifest, manifestContents, registry, locationFile, state, thesaurus, whisperBusy = false;
+let archiveSession;
 let unavailableProject = '';
 let locations = normalizeLocations();
 
-function remember() {
-  atomic(registry, JSON.stringify({ folder }));
+function remember(dir, archive) {
+  atomic(registry, JSON.stringify({ folder: dir, archive: archive?.filename }));
 }
-function load(dir, rememberProject = true) {
+function load(dir, rememberProject = true, archive) {
   const filename = path.join(dir, 'roman.json');
   const raw = fs.readFileSync(filename, 'utf8');
   const next = validProject(JSON.parse(raw));
+  if (rememberProject) remember(dir, archive);
+  const previous = archiveSession;
   folder = dir;
   manifest = filename;
   manifestContents = raw;
   state = next;
-  if (rememberProject) remember();
+  archiveSession = archive;
+  if (previous && previous.folder !== dir && !previous.task && previous.pending === undefined) {
+    fsp.rm(previous.folder, { recursive: true, force: true }).catch(() => {});
+  }
   return state;
 }
+const workRoot = () => path.join(app.getPath('userData'), 'project-work');
+async function workingFolder() {
+  await fsp.mkdir(workRoot(), { recursive: true });
+  return fsp.mkdtemp(path.join(workRoot(), 'project-'));
+}
+function openSession(filename, dir, expected, savedHash) {
+  return new ArchiveSession(filename, dir, expected, savedHash, error => {
+    if (main && !main.isDestroyed()) main.webContents.send('archive-error', error.message);
+  });
+}
+
+async function openPackage(filename, previous, reuse = true) {
+  if (path.extname(filename).toLowerCase() === '.zip') return importZip(filename);
+  const existing = reuse ? (archiveSession?.filename === filename ? archiveSession.folder : previous) : null;
+  if (existing && folderContains(workRoot(), existing) && existing !== workRoot()) {
+    let stored;
+    try { stored = JSON.parse(await fsp.readFile(path.join(existing, 'archive.json'), 'utf8')); } catch {}
+    if (stored?.filename === filename && typeof stored.savedHash === 'string') {
+      const raw = await fsp.readFile(path.join(existing, 'roman.json'), 'utf8').catch(() => null);
+      if (raw !== null && (digest(raw) !== stored.savedHash || stamp(filename) === stored.expected)) {
+        const archive = openSession(filename, existing, stored.expected, stored.savedHash);
+        const next = load(existing, true, archive);
+        archive.queue(raw);
+        return next;
+      }
+    }
+  }
+  const dir = await workingFolder();
+  try {
+    const expected = await readArchive(filename, dir, true);
+    const raw = fs.readFileSync(path.join(dir, 'roman.json'), 'utf8');
+    const archive = openSession(filename, dir, expected, digest(raw));
+    archive.remember();
+    return load(dir, true, archive);
+  } catch (error) {
+    await fsp.rm(dir, { recursive: true, force: true });
+    throw error;
+  }
+}
+async function importZip(filename) {
+  // A legacy ZIP is an import. Remember the working copy for that source version
+  // so switching projects does not strand edits made before converting it.
+  const fingerprint = stamp(filename);
+  const dir = path.join(workRoot(), 'import-' + digest(filename + '\0' + fingerprint));
+  if (fs.existsSync(path.join(dir, 'roman.json'))) return load(dir);
+  const temp = await workingFolder();
+  try {
+    if (await readArchive(filename, temp, false) !== fingerprint) throw new Error(t("Die Datei wurde während des Öffnens geändert. Öffne sie erneut."));
+    await fsp.rename(temp, dir);
+    return load(dir);
+  } finally {
+    await fsp.rm(temp, { recursive: true, force: true });
+  }
+}
+async function createPackage(filename, title, style) {
+  const dir = await workingFolder();
+  const raw = JSON.stringify(project(title, false, style, t("Kapitel") + " 1"), null, 2);
+  try {
+    await fsp.mkdir(path.join(dir, 'Material'));
+    await fsp.writeFile(path.join(dir, 'roman.json'), raw, { flag: 'wx' });
+    const expected = await writeArchive(filename, raw, dir, null);
+    const archive = openSession(filename, dir, expected, digest(raw));
+    archive.remember();
+    return load(dir, true, archive);
+  } catch (error) {
+    await fsp.rm(dir, { recursive: true, force: true });
+    throw error;
+  }
+}
+
 function initialize(dir, title, demo, rememberProject = true, style) {
   fs.mkdirSync(path.join(dir, 'Material'), { recursive: true });
   const filename = path.join(dir, 'roman.json');
@@ -97,6 +174,7 @@ function persist() {
   if (next === current) return;
   atomic(manifest, next);
   manifestContents = next;
+  archiveSession?.queue(next);
 }
 function save(draft) {
   const validated = validProject(draft);
@@ -131,28 +209,16 @@ function preferredRoot() {
   catch {}
   return app.getPath('documents');
 }
-function requireNewDestination(destination, root, copy = false) {
-  const resolved = path.join(fs.realpathSync(path.dirname(destination)), path.basename(destination));
+function packageDestination(destination, root) {
+  const filename = /\.scrpt$/i.test(destination) ? destination : destination + '.scrpt';
+  const directory = fs.realpathSync(path.dirname(filename));
+  const resolved = path.join(directory, path.basename(filename));
   if (root && !folderContains(root, resolved)) throw new Error(t("Wähle einen Ordner innerhalb deines Cloud-Ordners."));
-  let source = path.resolve(folder);
-  try { source = fs.realpathSync(folder); } catch {}
-  if (copy && folderContains(source, resolved)) throw new Error(t("Wähle einen neuen Ordner außerhalb des Projektordners."));
-  if (fs.existsSync(resolved)) throw new Error(t("Wähle einen neuen Ordnernamen."));
+  if (folderContains(workRoot(), resolved)) throw new Error(t("Wähle einen neuen Ordner außerhalb des Projektordners."));
+  if (stamp(resolved) !== null) throw new Error(t("Es gibt bereits eine Datei mit diesem Namen. Wähle einen anderen Namen."));
   return resolved;
 }
-async function writeProjectCopy(destination, draft) {
-  const snapshot = { ...validProject(draft), assets: state.assets };
-  const temp = destination + '.partial-' + randomUUID();
-  try {
-    await fsp.mkdir(temp);
-    await fsp.writeFile(path.join(temp, 'roman.json'), JSON.stringify(snapshot, null, 2));
-    const media = path.join(folder, 'Material');
-    if (fs.existsSync(media)) await fsp.cp(media, path.join(temp, 'Material'), { recursive: true });
-    await fsp.rename(temp, destination);
-  } finally {
-    await fsp.rm(temp, { recursive: true, force: true });
-  }
-}
+const packageFilter = () => [{ name: t("Scripter-Projekt"), extensions: ['scrpt'] }];
 function asset(id) {
   const result = state.assets.find(entry => entry.id === id);
   if (!result) throw new Error(t("Das Material wurde nicht gefunden."));
@@ -372,23 +438,54 @@ async function publish(format, manuscript) {
 }
 
 app.on('second-instance', () => { if (main) { if (main.isMinimized()) main.restore(); main.focus(); } });
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   registry = path.join(app.getPath('userData'), 'zuletzt.json');
   locationFile = path.join(app.getPath('userData'), 'speicherorte.json');
   try { locations = normalizeLocations(JSON.parse(fs.readFileSync(locationFile, 'utf8'))); } catch {}
   fs.mkdirSync(app.getPath('userData'), { recursive: true });
+  ui.setLanguage(locations.uiLanguage);
   let recent;
   try {
-    recent = JSON.parse(fs.readFileSync(registry, 'utf8')).folder;
-    load(recent);
+    recent = JSON.parse(fs.readFileSync(registry, 'utf8'));
+    if (recent.archive) await openPackage(recent.archive, recent.folder);
+    else load(recent.folder);
   } catch {
     const dir = path.join(app.getPath('userData'), 'Beispielprojekt');
-    if (typeof recent === 'string' && recent !== dir) unavailableProject = recent;
+    const last = recent?.archive || recent?.folder;
+    if (typeof last === 'string' && last !== dir) unavailableProject = last;
     if (fs.existsSync(path.join(dir, 'roman.json'))) load(dir, !unavailableProject);
     else initialize(dir, 'Der letzte Sommer', true, !unavailableProject);
   }
   main = new BrowserWindow({ width: 1540, height: 960, minWidth: 750, minHeight: 620, frame: !isLinux, backgroundColor: '#f6f5ef', title: productName + ' ' + version, autoHideMenuBar: true, webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true, spellcheck: true } });
   registerWindowState(main);
+  let allowClose = false;
+  let closing = false;
+  main.on('close', async event => {
+    if (allowClose || !archiveSession) return;
+    event.preventDefault();
+    if (closing) return;
+    closing = true;
+    try {
+      if (!await main.webContents.executeJavaScript('document.body.inert = true; flush()')) throw new Error(t("Das Projekt konnte nicht gespeichert werden."));
+      await archiveSession.sync();
+    } catch (error) {
+      const result = await dialog.showMessageBox(main, {
+        type: 'warning', message: t("Das Projektpaket konnte nicht aktualisiert werden."),
+        detail: t(error.message),
+        buttons: [t("Abbrechen"), t("Trotzdem schließen")], defaultId: 0, cancelId: 0
+      });
+      if (result.response !== 1) {
+        await main.webContents.executeJavaScript('document.body.inert = false');
+        closing = false;
+        return;
+      }
+    }
+    allowClose = true;
+    main.close();
+    // The renderer can still veto the close if a final local write fails.
+    if (!main.isDestroyed()) { allowClose = false; closing = false; }
+  });
+  main.webContents.on('will-prevent-unload', () => { main.webContents.executeJavaScript('document.body.inert = false').catch(() => {}); });
   main.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   main.webContents.on('will-navigate', event => event.preventDefault());
   session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => callback(contents === main.webContents && permission === 'media' && details.mediaTypes?.includes('audio') && !details.mediaTypes?.includes('video')));
@@ -448,6 +545,7 @@ app.whenReady().then(() => {
   handle('unavailable-project', () => unavailableProject);
   handle('identity', () => ({ name: productName, version, window: describeWindow(main) }));
   handle('save', save);
+  handle('wait-for-archive', () => archiveSession?.sync());
   ipcMain.on('flush', (event, draft) => {
     if (event.sender !== main.webContents) return;
     try { save(draft); event.returnValue = true; }
@@ -465,32 +563,43 @@ app.whenReady().then(() => {
     const choice = await dialog.showOpenDialog(main, { title: t("Ordner auswählen"), defaultPath: typeof selected === 'string' && path.isAbsolute(selected) ? selected : preferredRoot(), properties: ['openDirectory','createDirectory'] });
     return choice.canceled ? null : choice.filePaths[0];
   });
-  handle('new', async (cloud, details) => {
+  handle('new', async (cloud, details, discard) => {
     const root = cloud ? cloudRoot() : null;
     const title = typeof details?.title === 'string' ? details.title.trim().slice(0, 180) : '';
-    const suggestedFolder = title ? fileStem(title) : t("Mein Roman");
-    const choice = await dialog.showSaveDialog(main, { title: t("Projektordner anlegen"), defaultPath: path.join(root ?? preferredRoot(), suggestedFolder) });
+    const suggested = title ? fileStem(title) : t("Mein Roman");
+    const choice = await dialog.showSaveDialog(main, { title: t("Scripter-Projekt"), defaultPath: path.join(root ?? preferredRoot(), suggested + '.scrpt'), filters: packageFilter() });
     if (choice.canceled) return null;
-    const destination = requireNewDestination(choice.filePath, root);
-    return initialize(destination, title || path.basename(destination), false, true, details);
+    if (!discard) await archiveSession?.sync();
+    const destination = packageDestination(choice.filePath, root);
+    return createPackage(destination, title || path.basename(destination, path.extname(destination)), details);
   });
-  handle('open', async cloud => {
+  handle('open', async (cloud, _details, discard) => {
     const root = cloud ? cloudRoot() : null;
-    const choice = await dialog.showOpenDialog(main, { title: t("roman.json aus einem Projekt öffnen"), defaultPath: root ?? preferredRoot(), properties: ['openFile'], filters: [{ name: t("Scripter-Projekt"), extensions: ['json'] }] });
+    const choice = await dialog.showOpenDialog(main, {
+      title: t("Projekt öffnen"), defaultPath: root ?? preferredRoot(), properties: ['openFile'],
+      filters: [{ name: t("Scripter-Projekt"), extensions: ['scrpt', 'zip', 'json'] }]
+    });
     if (choice.canceled) return null;
-    if (path.basename(choice.filePaths[0]) !== 'roman.json') throw new Error(t("Wähle die Datei „roman.json“ im Projektordner."));
-    const dir = fs.realpathSync(path.dirname(choice.filePaths[0]));
-    if (root && !folderContains(root, dir)) throw new Error(t("Wähle ein Projekt innerhalb deines Cloud-Ordners."));
-    return load(dir);
+    if (!discard) await archiveSession?.sync();
+    const selected = choice.filePaths[0];
+    const actual = fs.realpathSync(selected);
+    if (root && !folderContains(root, actual)) throw new Error(t("Wähle ein Projekt innerhalb deines Cloud-Ordners."));
+    if (['.scrpt', '.zip'].includes(path.extname(actual).toLowerCase())) return openPackage(actual, undefined, !discard);
+    if (path.basename(actual) !== 'roman.json') throw new Error(t("Wähle eine .scrpt-Datei, eine ZIP-Sicherung oder roman.json."));
+    return load(path.dirname(actual));
   });
-  handle('backup', async (draft, cloud) => {
+  handle('backup', async (draft, cloud, saveAs) => {
     const root = cloud ? cloudRoot() : null;
-    const name = fileStem(draft.title) + (cloud ? '' : t(" – Sicherung"));
-    const choice = await dialog.showSaveDialog(main, { title: cloud ? t("Projekt als Cloud-Kopie speichern") : t("Sicherung in neuem Ordner speichern"), defaultPath: path.join(root ?? preferredRoot(), name) });
+    const name = fileStem(draft.title) + (cloud || saveAs ? '' : t(" – Sicherung"));
+    const choice = await dialog.showSaveDialog(main, {
+      title: cloud ? t("Projekt als Cloud-Kopie speichern") : t("Als .scrpt speichern …"),
+      defaultPath: path.join(root ?? preferredRoot(), name + '.scrpt'), filters: packageFilter()
+    });
     if (choice.canceled) return null;
-    const destination = requireNewDestination(choice.filePath, root, true);
-    await writeProjectCopy(destination, draft);
-    return true;
+    const destination = packageDestination(choice.filePath, root);
+    const snapshot = { ...validProject(draft), assets: state.assets };
+    await writeArchive(destination, JSON.stringify(snapshot, null, 2), folder, null);
+    return saveAs ? openPackage(destination) : true;
   });
   handle('pick', async () => {
     const result = await dialog.showOpenDialog(main, { title: t("Material hinzufügen"), properties: ['openFile','multiSelections'] });
@@ -533,7 +642,9 @@ app.whenReady().then(() => {
     if (error) throw new Error(error);
   });
   handle('insert-asset', insertable);
-  handle('remove-asset', id => {
+  handle('remove-asset', async id => {
+    // Let an in-flight ZIP finish reading before deleting a referenced file.
+    if (archiveSession?.task) await archiveSession.task.catch(() => {});
     const item = asset(id);
     const previous = state.assets;
     state.assets = previous.filter(entry => entry.id !== id);
@@ -582,7 +693,6 @@ app.whenReady().then(() => {
     win.webContents.on('will-navigate', event => event.preventDefault());
     await win.loadFile('hilfe.html', { query: { lang: locations.uiLanguage } });
   });
-  ui.setLanguage(locations.uiLanguage);
   main.loadFile('index.html');
 });
 app.on('window-all-closed', () => app.quit());

@@ -12,6 +12,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.print.PrintManager;
 import android.provider.OpenableColumns;
+import android.provider.DocumentsContract;
 import android.speech.RecognizerIntent;
 import android.util.Base64;
 import android.view.WindowInsets;
@@ -235,7 +236,7 @@ public final class MainActivity extends Activity {
                 break;
             case "import":
                 intent = document(Intent.ACTION_OPEN_DOCUMENT, "*/*").putExtra(Intent.EXTRA_MIME_TYPES,
-                    new String[]{"application/json", "application/zip", "application/x-zip-compressed", "application/octet-stream", "text/plain"});
+                    new String[]{ProjectFiles.PACKAGE_MIME, "application/json", "application/zip", "application/x-zip-compressed", "application/octet-stream", "text/plain"});
                 break;
             case "export":
             case "backup":
@@ -316,13 +317,12 @@ public final class MainActivity extends Activity {
                     in.mark(2);
                     boolean archive = in.read() == 'P' && in.read() == 'K';
                     in.reset();
-                    return files.importProject(in, archive);
+                    boolean strict = displayName(uri).toLowerCase(Locale.ROOT).endsWith(".scrpt") ||
+                        ProjectFiles.PACKAGE_MIME.equals(getContentResolver().getType(uri));
+                    return files.importProject(in, archive, strict);
                 }
             case "backup":
-                try (OutputStream out = getContentResolver().openOutputStream(uri, "wt")) {
-                    files.exportProject(request.data.getString("project"), request.data.getString("contents"), out);
-                }
-                return true;
+                return exportPackage(request, uri);
             case "export":
                 try (OutputStream out = getContentResolver().openOutputStream(uri, "wt")) {
                     if ("application/epub+zip".equals(request.data.getString("mime"))) Epub.write(request.data, out);
@@ -330,6 +330,26 @@ public final class MainActivity extends Activity {
                 }
                 return true;
             default: throw new IOException();
+        }
+    }
+
+    private boolean exportPackage(Request request, Uri uri) throws Exception {
+        // Prepare the complete ZIP before streaming it into the new document.
+        File staged = File.createTempFile("scripter-", ".scrpt", getCacheDir());
+        try {
+            try (OutputStream out = new FileOutputStream(staged)) {
+                files.exportProject(request.data.getString("project"), request.data.getString("contents"), out);
+            }
+            try (InputStream in = new FileInputStream(staged);
+                    OutputStream out = getContentResolver().openOutputStream(uri, "wt")) {
+                ProjectFiles.copy(in, out, staged.length());
+            }
+            return true;
+        } catch (Exception error) {
+            try { DocumentsContract.deleteDocument(getContentResolver(), uri); } catch (Exception ignored) {}
+            throw error;
+        } finally {
+            staged.delete();
         }
     }
 

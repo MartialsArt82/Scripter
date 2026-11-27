@@ -25,6 +25,9 @@ import java.util.zip.ZipOutputStream;
 final class ProjectFiles {
     private static final long PROJECT_LIMIT = 50L * 1024 * 1024;
     private static final long MATERIAL_LIMIT = 1024L * 1024 * 1024;
+    private static final long PACKAGE_MATERIAL_LIMIT = 8L * 1024 * 1024 * 1024;
+    private static final int PACKAGE_ENTRIES = 10000;
+    static final String PACKAGE_MIME = "application/vnd.scripter.project";
     private static final String PROJECT_FILE = "roman.json";
     private static final String MATERIAL_DIR = "Material";
     private final Context context;
@@ -126,14 +129,17 @@ final class ProjectFiles {
         return result;
     }
 
-    String importProject(InputStream stream, boolean archive) throws Exception {
+    String importProject(InputStream stream, boolean archive, boolean strict) throws Exception {
         String project = UUID.randomUUID().toString();
         String contents = null;
         try {
+            if (strict && !archive) throw new IOException("Invalid project package");
             if (archive) {
-                long remaining = MATERIAL_LIMIT;
+                int count = 0;
+                long remaining = PACKAGE_MATERIAL_LIMIT;
                 try (ZipInputStream zip = new ZipInputStream(stream)) {
                     for (ZipEntry entry; (entry = zip.getNextEntry()) != null; zip.closeEntry()) {
+                        if (++count > PACKAGE_ENTRIES) throw new IOException("Too many archive entries");
                         if (entry.isDirectory() && MATERIAL_DIR.concat("/").equals(entry.getName())) continue;
                         if (PROJECT_FILE.equals(entry.getName()) && contents == null) {
                             contents = readText(zip, PROJECT_LIMIT);
@@ -146,7 +152,14 @@ final class ProjectFiles {
                     }
                 }
             } else contents = readText(stream, PROJECT_LIMIT);
-            validateProject(contents);
+            JSONArray assets = validateProject(contents);
+            if (strict) {
+                for (int i = 0; i < assets.length(); i++) {
+                    JSONObject asset = assets.getJSONObject(i);
+                    if (asset.has("file") && !material(context, project, asset.getString("file")).isFile())
+                        throw new IOException("Missing material");
+                }
+            }
             saveProject(project, contents);
             return project;
         } catch (Exception error) {
@@ -159,7 +172,7 @@ final class ProjectFiles {
         }
     }
 
-    private static void validateProject(String contents) throws Exception {
+    private static JSONArray validateProject(String contents) throws Exception {
         JSONObject snapshot = new JSONObject(contents);
         JSONArray chapters = snapshot.getJSONArray("chapters");
         JSONArray assets = snapshot.getJSONArray("assets");
@@ -170,26 +183,39 @@ final class ProjectFiles {
             if (!(chapter.get("title") instanceof String) || !(chapter.get("id") instanceof String) ||
                 !(chapter.get("html") instanceof String)) throw new IOException("Invalid chapter");
         }
+        java.util.Set<String> names = new java.util.HashSet<>();
         for (int i = 0; i < assets.length(); i++) {
             JSONObject asset = assets.getJSONObject(i);
-            id(asset.getString("id"));
-            if (asset.has("file")) assetName(asset.getString("file"));
+            String id = id(asset.getString("id"));
+            if (asset.has("file")) {
+                String name = assetName(asset.getString("file"));
+                if (!name.startsWith(id + ".") || !names.add(name)) throw new IOException("Invalid attachment");
+            }
         }
+        return assets;
     }
 
     void exportProject(String project, String contents, OutputStream destination) throws Exception {
-        JSONArray assets = new JSONObject(contents).getJSONArray("assets");
+        JSONArray assets = validateProject(contents);
+        byte[] manifest = contents.getBytes(StandardCharsets.UTF_8);
+        if (manifest.length > PROJECT_LIMIT) throw new IOException("Project exceeds size limit");
+        long remaining = PACKAGE_MATERIAL_LIMIT;
+        int entries = 2;
         try (ZipOutputStream zip = new ZipOutputStream(destination)) {
+            zip.setLevel(java.util.zip.Deflater.BEST_SPEED);
             zip.putNextEntry(new ZipEntry(PROJECT_FILE));
-            zip.write(contents.getBytes(StandardCharsets.UTF_8));
+            zip.write(manifest);
+            zip.closeEntry();
+            zip.putNextEntry(new ZipEntry(MATERIAL_DIR + "/"));
             zip.closeEntry();
             for (int i = 0; i < assets.length(); i++) {
                 JSONObject asset = assets.getJSONObject(i);
                 if (!asset.has("file")) continue;
+                if (++entries > PACKAGE_ENTRIES) throw new IOException("Too many archive entries");
                 File file = material(context, project, asset.getString("file"));
-                if (!file.isFile()) continue;
+                if (!file.isFile()) throw new IOException("Missing material");
                 zip.putNextEntry(new ZipEntry(MATERIAL_DIR + "/" + file.getName()));
-                try (InputStream from = new FileInputStream(file)) { copy(from, zip, MATERIAL_LIMIT); }
+                try (InputStream from = new FileInputStream(file)) { remaining -= copy(from, zip, remaining); }
                 zip.closeEntry();
             }
         }

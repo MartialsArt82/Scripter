@@ -1,11 +1,11 @@
 name: Scripter-Release
 on:
   push:
-    branches: [codex/scripter-release-1.4]
+    branches: [codex/scripter-release-1.5]
   workflow_dispatch:
 
 concurrency:
-  group: scripter-release-1-4
+  group: scripter-release-1-5
   cancel-in-progress: false
 
 jobs:

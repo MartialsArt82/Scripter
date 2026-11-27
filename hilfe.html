@@ -4,21 +4,21 @@ html{color-scheme:light dark}body{font:16px/1.6 system-ui,sans-serif;max-width:7
 </style><script defer src="i18n.js"></script><script defer src="i18n-messages.js"></script><script defer src="i18n-ui.js"></script>
 </head><body>
 <h1>Scripter</h1>
-<p>Die App öffnet beim ersten Start einen Beispielroman. Wähle das Projektmenü oben links und dann Neues Projekt, um mit einem eigenen Projektordner zu beginnen.</p>
+<p>Die App öffnet beim ersten Start einen Beispielroman. Wähle das Projektmenü oben links und dann Neues Projekt, um eine eigene .scrpt-Projektdatei anzulegen.</p>
 <h2>Schreiben und sichern</h2>
 <p>Lege im Kapitelbereich einzelne Kapitel an. Über … änderst du die Reihenfolge. Verwende Kapitelziel für ein Wortziel und eine kurze Szenenplanung. Der Editor speichert deine Änderungen automatisch. Mit Strg + S beziehungsweise ⌘ + S kannst du sofort speichern.</p>
-<p>Über Projekt sichern erstellst du eine vollständige Kopie. Für einen Wechsel des Rechners kopierst du den gesamten Projektordner und öffnest auf dem anderen Gerät die Datei roman.json. Der Ordner Material enthält importierte Dateien. Bearbeite eine Projektkopie jeweils auf einem Rechner und kopiere sie nach Abschluss zurück.</p>
+<p>Eine .scrpt-Datei enthält Manuskript, Storyboard und alle Anhänge. Öffne eine bestehende roman.json oder ältere Scripter-ZIP-Sicherung und wähle Als .scrpt speichern …, um sie umzuwandeln. Über Projekt sichern erstellst du eine zusätzliche Kopie.</p>
 <h2>Projektgestaltung und Barrierefreiheit</h2>
 <p>Wähle beim Anlegen des Projekts eine Kategorie und eine Projektfarbe. Scripter zeigt das passende Symbol beim Projekttitel und verwendet die Farbe für die Oberfläche. Beides kannst du über Projektmenü → Projektangaben ändern.</p>
 <p>In den Einstellungen siehst du die verfügbaren Schriften als Vorschau. Courier Prime ist eine mitgelieferte Schreibmaschinenschrift, die auch in die PDF-Ausgabe eingebettet wird. Bei fehlenden Systemschriften zeigt Scripter den Hinweis Ersatzschrift auf diesem Gerät.</p>
 <p>Unter Oberflächensprache kannst du die App auf Deutsch, Englisch, Französisch, Spanisch oder Portugiesisch umstellen. Die Sprache für Rechtschreibprüfung, Wortschatz und Diktat lässt sich separat wählen.</p>
 <p>Unter Barrierefreiheit kannst du hohen Kontrast, eine deutlichere Tastaturmarkierung und weniger Bewegung aktivieren. Bildschirmskalierung, Textgröße und Zeilenabstand kannst du unabhängig einstellen. Weniger Bewegung blendet beim Blättern die nächste Doppelseite direkt ein.</p>
 <h2>Speicherort und Cloud-Synchronisation</h2>
-<p>Unter Einstellungen → Speicherorte kannst du einen Wunschordner auswählen. Als Standard verwendet Scripter den Dokumente-Ordner. Den Speicherort bisheriger Projekte siehst du an der jeweiligen roman.json.</p>
+<p>Unter Einstellungen → Speicherorte kannst du einen Wunschordner auswählen. Als Standard verwendet Scripter den Dokumente-Ordner. Ältere Projekte findest du im Ordner ihrer roman.json.</p>
 <ol>
   <li>Richte Google Drive, OneDrive, Dropbox, iCloud Drive oder deinen Anbieter auf dem Rechner so ein, dass sein Ordner im Dateimanager verfügbar ist. Verwende einen lokal verfügbaren Ordner oder eine beschreibbare Einbindung mit Schreibcache.</li>
   <li>Wähle in Scripter unter Einstellungen → Cloud-Synchronisation den Anbieter und seinen synchronisierten Ordner. Speichere die Einstellungen. Wiederhole die Ordnerauswahl auf jedem Gerät.</li>
-  <li>Lege im Projektmenü ein neues Cloud-Projekt an oder wähle für einen bestehenden Roman Kopie in Cloud-Ordner. Anschließend öffnest du die roman.json im Cloud-Projektordner über Cloud-Projekt öffnen. Der Dienst synchronisiert den gesamten Ordner einschließlich Material.</li>
+  <li>Lege im Projektmenü ein neues Cloud-Projekt an oder wähle für einen bestehenden Roman Kopie in Cloud-Ordner. Anschließend öffnest du die .scrpt-Datei über Cloud-Projekt öffnen. Der Dienst synchronisiert die Datei mitsamt Manuskript und Material.</li>
 </ol>
 <p>Warte vor einem Gerätewechsel, bis dein Sync-Dienst fertig ist. Bearbeite ein Projekt jeweils auf einem Gerät. Falls Scripter eine externe Änderung meldet, sichere deinen offenen Arbeitsstand im Projektmenü als Kopie und öffne anschließend die gewünschte Fassung.</p>
 <h2>Recherche und Material</h2>
@@ -39,6 +39,6 @@ html{color-scheme:light dark}body{font:16px/1.6 system-ui,sans-serif;max-width:7
 <p>Im Buchsatz legst du Format, Rand, Schriftgröße, Zeilenabstand und Seitenzahlen fest. Die Satzvorschau zeigt das paginierte Druck-PDF mit Titelseite und Kapitelbeginn auf einer neuen Seite. Prüfe es gegen die Vorgaben des Druckdienstes. Für EPUB und bearbeitbare Dateien wird die Kapitelstruktur übernommen. Das EPUB verwendet die Seiteneinstellungen des jeweiligen Lesegeräts.</p>
 <p>Die fertigen App-Pakete enthalten Pandoc für DOCX, ODT, EPUB, RTF, TXT, Markdown, LaTeX und ICML. Installiere LibreOffice zusätzlich für das ältere DOC-Format. Das Satz-PDF ist ein Standard-PDF. Druckereien können eigene Anforderungen an PDF/X, Beschnitt und Farbprofile haben. HTML wird direkt erzeugt.</p>
 <hr>
-<p>Scripter 1.4 · Electron, Hunspell, MyThes und faster-whisper. Die Wörterbuchdaten stammen aus den LibreOffice-Wörterbüchern. Lizenz- und Quellenhinweise sind im Paket beziehungsweise im Quellcode enthalten.</p>
+<p>Scripter 1.5 · Electron, Hunspell, MyThes und faster-whisper. Die Wörterbuchdaten stammen aus den LibreOffice-Wörterbüchern. Lizenz- und Quellenhinweise sind im Paket beziehungsweise im Quellcode enthalten.</p>
 <p><a target="_blank" href="https://www.python.org/downloads/">python.org</a> · <a target="_blank" href="https://de.libreoffice.org/download/download/">LibreOffice</a></p>
 </body></html>
