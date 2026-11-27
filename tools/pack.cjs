@@ -12,16 +12,13 @@ async function pack() {
   await fs.rm(staging, { recursive: true, force: true });
   await fs.mkdir(staging, { recursive: true });
   for (const name of files) await fs.cp(path.join(root, name), path.join(staging, name), { recursive: true });
-  const dependencies = JSON.parse(execFileSync(process.execPath, [process.env.npm_execpath, 'ls', '--omit=dev', '--all', '--parseable', '--json'], { cwd: root, encoding: 'utf8' }));
-  const names = new Set();
-  function collect(tree) {
-    for (const [name, details] of Object.entries(tree.dependencies || {})) {
-      names.add(name);
-      collect(details);
+  const installed = execFileSync(process.execPath, [process.env.npm_execpath, 'ls', '--omit=dev', '--all', '--parseable'], { cwd: root, encoding: 'utf8' });
+  for (const location of installed.trim().split(/\r?\n/)) {
+    const relative = path.relative(root, location);
+    if (relative.startsWith('node_modules' + path.sep)) {
+      await fs.cp(location, path.join(staging, relative), { recursive: true });
     }
   }
-  collect(dependencies);
-  for (const name of names) await fs.cp(path.join(root, 'node_modules', name), path.join(staging, 'node_modules', name), { recursive: true });
   await createPackageWithOptions(staging, path.join(build, 'app.asar'), { unpack: '**/thesauri.sqlite' });
 }
 
